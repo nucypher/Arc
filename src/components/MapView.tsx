@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -315,138 +315,11 @@ const MapView: React.FC<MapViewProps> = ({
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
   const saveSuccessTimeoutRef = useRef<NodeJS.Timeout>();
 
-  // Get user's initial position for map center
-  useEffect(() => {
-    if (!hasSetInitialPosition && "geolocation" in navigator) {
-      console.log('Attempting to get initial position...');
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          console.log('Initial position received:', {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-            accuracy: position.coords.accuracy
-          });
-          const newPosition: [number, number] = [position.coords.latitude, position.coords.longitude];
-          setDefaultCenter(newPosition);
-          setUserPosition(newPosition);
-          setHasSetInitialPosition(true);
-          setLocationError(null);
-        },
-        (error) => {
-          console.error('Error getting initial location:', error, {
-            code: error.code,
-            message: error.message
-          });
-          const errorMessage = getGeolocationErrorMessage(error);
-          setLocationError(errorMessage);
-          console.log('Setting fallback position (London)');
-          setDefaultCenter([51.505, -0.09]);
-          setHasSetInitialPosition(true);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 20000,
-          maximumAge: 0
-        }
-      );
-    }
-  }, [hasSetInitialPosition]);
-
-  // Update user position regularly
-  useEffect(() => {
-    let watchId: number | null = null;
-    
-    if ("geolocation" in navigator) {
-      console.log('Setting up position watching...');
-      watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          console.log('Position update received:', {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-            accuracy: position.coords.accuracy,
-            timestamp: new Date(position.timestamp).toISOString()
-          });
-          setUserPosition([position.coords.latitude, position.coords.longitude]);
-          setLocationError(null);
-          setIsReconnecting(false);
-        },
-        (error) => {
-          console.error('Error watching position:', error, {
-            code: error.code,
-            message: error.message
-          });
-          setLocationError(getGeolocationErrorMessage(error));
-          setIsReconnecting(true);
-          
-          if (error.code === error.TIMEOUT) {
-            console.log('Timeout error, retrying with more lenient settings...');
-            retryWithLongerTimeout();
-          }
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 20000,
-          maximumAge: 5000
-        }
-      );
-      console.log('Position watching started with ID:', watchId);
-    }
-
-    return () => {
-      if (watchId !== null) {
-        console.log('Cleaning up position watching, ID:', watchId);
-        navigator.geolocation.clearWatch(watchId);
-      }
-    };
-  }, []);
-
-  const getGeolocationErrorMessage = (error: GeolocationPositionError): string => {
-    switch (error.code) {
-      case error.PERMISSION_DENIED:
-        return "Location access was denied. Please enable location services to use this feature.";
-      case error.POSITION_UNAVAILABLE:
-        return "Location information is unavailable. Please check your device's location settings.";
-      case error.TIMEOUT:
-        return "Location request timed out. Please check your internet connection and try again.";
-      default:
-        return "An unknown error occurred while trying to get your location.";
-    }
-  };
-
-  // Parse location messages to get coordinates
-  const locationMarkers = messages
-    .filter(msg => msg.content.startsWith('📍 Location:'))
-    .map(msg => {
-      try {
-        // Extract coordinates directly from the message format "📍 Location: lat, lng"
-        const [lat, lng] = msg.content
-          .replace('📍 Location:', '')
-          .trim()
-          .split(',')
-          .map(coord => parseFloat(coord.trim()));
-
-        if (isNaN(lat) || isNaN(lng)) {
-          console.warn('Invalid coordinates in message:', msg.content);
-          return null;
-        }
-
-        return {
-          position: [lat, lng] as [number, number],
-          sender: msg.senderNickname,
-          timestamp: msg.timestamp
-        };
-      } catch (error) {
-        console.warn('Failed to parse location message:', msg.content, error);
-        return null;
-      }
-    })
-    .filter((marker): marker is NonNullable<typeof marker> => marker !== null);
-
   const requestLocationPermission = async (): Promise<boolean> => {
     console.log('Requesting location permission...');
     if (!("geolocation" in navigator)) {
       console.error('Geolocation not supported');
-      setLocationError("Geolocation is not supported by your browser");
+      setIsReconnecting(true);
       return false;
     }
 
@@ -456,12 +329,13 @@ const MapView: React.FC<MapViewProps> = ({
       
       if (permission.state === 'denied') {
         console.error('Location permission denied');
-        setLocationError("Location access is denied. Please enable location services in your browser settings.");
+        setIsReconnecting(true);
         return false;
       }
 
       if (permission.state === 'prompt') {
         console.log('Triggering permission prompt...');
+        // Request position to trigger the permission prompt
         await new Promise((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(resolve, reject, {
             enableHighAccuracy: true,
@@ -475,140 +349,26 @@ const MapView: React.FC<MapViewProps> = ({
       return true;
     } catch (error) {
       console.error('Error requesting location permission:', error);
-      if (error instanceof GeolocationPositionError) {
-        const errorMessage = getGeolocationErrorMessage(error);
-        console.error('Geolocation error details:', {
-          code: error.code,
-          message: error.message,
-          friendlyMessage: errorMessage
-        });
-        setLocationError(errorMessage);
-      } else {
-        setLocationError("Failed to get location permission");
-      }
+      setIsReconnecting(true);
       return false;
     }
   };
 
-  const startSharingLocation = async () => {
-    console.log('Starting location sharing...');
-    setIsSettingUpSharing(true);
-    
-    try {
-      const hasPermission = await requestLocationPermission();
-      console.log('Permission check result:', hasPermission);
-      if (!hasPermission) {
-        setIsSettingUpSharing(false);
-        return;
-      }
-
-      if ("geolocation" in navigator) {
-        console.log('Setting up live location sharing...');
-        
-        // First get a single position with high accuracy
-        try {
-          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(
-              resolve,
-              reject,
-              {
-                enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 0
-              }
-            );
-          });
-
-          // Send initial position
-          await sendLocationUpdate(
-            account,
-            nickname,
-            position.coords.latitude,
-            position.coords.longitude,
-            position.coords.accuracy,
-            true,
-            web3Provider,
-            condition,
-            currentDomain,
-            ritualId
-          );
-
-          // If we got an initial position, start watching with more lenient settings
-          console.log('Got initial position, starting watch');
-          watchIdRef.current = navigator.geolocation.watchPosition(
-            async (position) => {
-              console.log('Live sharing position update:', {
-                lat: position.coords.latitude,
-                lng: position.coords.longitude,
-                accuracy: position.coords.accuracy,
-                timestamp: new Date(position.timestamp).toISOString()
-              });
-
-              try {
-                await sendLocationUpdate(
-                  account,
-                  nickname,
-                  position.coords.latitude,
-                  position.coords.longitude,
-                  position.coords.accuracy,
-                  true,
-                  web3Provider,
-                  condition,
-                  currentDomain,
-                  ritualId
-                );
-                setUserPosition([position.coords.latitude, position.coords.longitude]);
-                setLocationError(null);
-              } catch (error) {
-                console.error('Failed to send location update:', error);
-              }
-            },
-            (error) => {
-              console.error('Error in live location sharing:', error);
-              const errorMessage = getGeolocationErrorMessage(error);
-              setLocationError(errorMessage);
-              
-              if (error.code === error.TIMEOUT) {
-                console.log('Timeout error, retrying with more lenient settings...');
-                stopSharingLocation();
-                retryWithLongerTimeout();
-              }
-            },
-            {
-              enableHighAccuracy: false,
-              timeout: 15000,
-              maximumAge: 5000
-            }
-          );
-          console.log('Live sharing watch started with ID:', watchIdRef.current);
-          setIsSharing(true);
-        } catch (initialError) {
-          console.error('Failed to get initial position:', initialError);
-          retryWithLongerTimeout();
-        }
-      } else {
-        console.error('Geolocation not supported');
-        setLocationError("Geolocation is not supported by your browser");
-      }
-    } catch (error) {
-      console.error('Error setting up location sharing:', error);
-      setLocationError("Failed to set up location sharing");
-    } finally {
-      setIsSettingUpSharing(false);
-    }
-  };
-
-  const retryWithLongerTimeout = () => {
+  const startLocationWatch = useCallback((options: PositionOptions = {}) => {
     if ("geolocation" in navigator) {
-      console.log('Retrying location watch with lenient settings');
-      watchIdRef.current = navigator.geolocation.watchPosition(
+      console.log('Starting location watch with options:', options);
+      
+      const watchId = navigator.geolocation.watchPosition(
         async (position) => {
-          console.log('Position updated:', {
+          console.log('Position update received:', {
             lat: position.coords.latitude,
             lng: position.coords.longitude,
             accuracy: position.coords.accuracy,
             timestamp: new Date(position.timestamp).toISOString()
           });
+          
+          setUserPosition([position.coords.latitude, position.coords.longitude]);
+          setIsReconnecting(false);
 
           try {
             await sendLocationUpdate(
@@ -624,30 +384,63 @@ const MapView: React.FC<MapViewProps> = ({
               ritualId
             );
           } catch (error) {
-            console.error('Failed to send location update during retry:', error);
+            console.error('Failed to send location update:', error);
+            // Don't stop watching, just log the error
           }
-
-          if (onShareLocation) {
-            onShareLocation({
-              lat: position.coords.latitude,
-              lng: position.coords.longitude
-            });
-          }
-          setLocationError(null);
         },
         (error) => {
-          console.error('Error in retry location watching:', error);
-          const errorMessage = getGeolocationErrorMessage(error);
-          setLocationError(errorMessage);
-          stopSharingLocation();
+          console.warn('Location watch error:', error);
+          setIsReconnecting(true);
+
+          // If we get a timeout, try with more lenient settings
+          if (error.code === error.TIMEOUT) {
+            console.log('Timeout error, retrying with more lenient settings...');
+            // Clear current watch
+            if (watchIdRef.current !== null) {
+              navigator.geolocation.clearWatch(watchIdRef.current);
+            }
+            // Retry with more lenient settings
+            startLocationWatch({
+              enableHighAccuracy: false,
+              timeout: 30000,
+              maximumAge: 30000
+            });
+          }
+          // For other errors, just keep trying with current settings
         },
         {
-          enableHighAccuracy: false,    // Don't require high accuracy
-          timeout: 30000,               // 30 second timeout
-          maximumAge: 30000             // Accept positions up to 30 seconds old
+          enableHighAccuracy: true,
+          timeout: 20000,
+          maximumAge: 5000,
+          ...options
         }
       );
-      setIsSharing(true);
+
+      watchIdRef.current = watchId;
+      return watchId;
+    }
+    return null;
+  }, [account, nickname, web3Provider, condition, currentDomain, ritualId]);
+
+  const startSharingLocation = async () => {
+    console.log('Starting location sharing...');
+    setIsSettingUpSharing(true);
+    
+    try {
+      const hasPermission = await requestLocationPermission();
+      console.log('Permission check result:', hasPermission);
+      
+      if (hasPermission) {
+        // Start watching with initial settings
+        startLocationWatch();
+        setIsSharing(true);
+      }
+    } catch (error) {
+      console.error('Error setting up location sharing:', error);
+      // Don't stop sharing, just show reconnecting state
+      setIsReconnecting(true);
+    } finally {
+      setIsSettingUpSharing(false);
     }
   };
 
@@ -657,8 +450,45 @@ const MapView: React.FC<MapViewProps> = ({
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
       setIsSharing(false);
+      setIsReconnecting(false);
     }
   };
+
+  // Update the initial position effect to use the same watching mechanism
+  useEffect(() => {
+    if (!hasSetInitialPosition && "geolocation" in navigator) {
+      console.log('Getting initial position...');
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          console.log('Initial position received');
+          const newPosition: [number, number] = [position.coords.latitude, position.coords.longitude];
+          setDefaultCenter(newPosition);
+          setUserPosition(newPosition);
+          setHasSetInitialPosition(true);
+        },
+        (error) => {
+          console.warn('Error getting initial position:', error);
+          // Set a default position but don't treat it as an error
+          setDefaultCenter([51.505, -0.09]);
+          setHasSetInitialPosition(true);
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 10000,
+          maximumAge: 30000
+        }
+      );
+    }
+  }, [hasSetInitialPosition]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, []);
 
   // Add effect to handle centering on user
   useEffect(() => {
@@ -709,6 +539,46 @@ const MapView: React.FC<MapViewProps> = ({
     };
   }, []);
 
+  // Parse location messages to get coordinates
+  const locationMarkers = messages
+    .filter(msg => msg.content.startsWith('📍 Location:'))
+    .map(msg => {
+      try {
+        const [lat, lng] = msg.content
+          .replace('📍 Location:', '')
+          .trim()
+          .split(',')
+          .map(coord => parseFloat(coord.trim()));
+
+        if (isNaN(lat) || isNaN(lng)) {
+          console.warn('Invalid coordinates in message:', msg.content);
+          return null;
+        }
+
+        return {
+          position: [lat, lng] as [number, number],
+          sender: msg.senderNickname,
+          timestamp: msg.timestamp,
+          isLive: false
+        };
+      } catch (error) {
+        console.warn('Failed to parse location message:', msg.content, error);
+        return null;
+      }
+    })
+    .filter((marker): marker is NonNullable<typeof marker> => marker !== null);
+
+  // Add live location markers to the map
+  const allMarkers = [
+    ...locationMarkers,
+    ...[...liveLocations.values()].map(update => ({
+      position: [update.latitude, update.longitude] as [number, number],
+      sender: update.nickname,
+      timestamp: update.timestamp,
+      isLive: update.isLive
+    }))
+  ];
+
   if (!hasSetInitialPosition) {
     return (
       <div className="flex-1 bg-gray-900 flex items-center justify-center">
@@ -739,17 +609,6 @@ const MapView: React.FC<MapViewProps> = ({
       </div>
     );
   }
-
-  // Add live location markers to the map
-  const allMarkers = [
-    ...locationMarkers,
-    ...[...liveLocations.values()].map(update => ({
-      position: [update.latitude, update.longitude] as [number, number],
-      sender: update.nickname,
-      timestamp: update.timestamp,
-      isLive: update.isLive
-    }))
-  ];
 
   return (
     <div className="flex-1 relative">

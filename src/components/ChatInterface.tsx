@@ -287,15 +287,24 @@ const ChatInterfaceInner: React.FC = () => {
           }, 500);
         });
         
-        // Subscribe to location updates
-        await subscribeToLocationUpdates((update: LocationUpdate) => {
-          console.log('[Location] Received location update:', update);
-          setLiveLocations(prev => {
-            const next = new Map(prev);
-            next.set(update.sender, update);
-            return next;
-          });
-        });
+        // Subscribe to location updates - ensure web3Provider is available
+        if (web3Provider) {
+          console.log('[Location] Setting up location subscription with web3Provider');
+          await subscribeToLocationUpdates(
+            (update: LocationUpdate) => {
+              console.log('[Location] Received location update:', update);
+              setLiveLocations(prev => {
+                const next = new Map(prev);
+                next.set(update.sender, update);
+                return next;
+              });
+            },
+            web3Provider,
+            currentDomain
+          );
+        } else {
+          console.warn('[Location] Web3Provider not available during subscription setup');
+        }
 
         console.log('Successfully set up all subscriptions');
         setIsSubscribed(true);
@@ -305,11 +314,12 @@ const ChatInterfaceInner: React.FC = () => {
     }
   }, [wakuNode, currentTopic, web3Provider, currentDomain, account, isSubscribed]);
 
+  // Add web3Provider to the useEffect dependencies to re-run setup when it becomes available
   useEffect(() => {
-    if (wakuNode && currentTopic && !isSubscribed) {
+    if (wakuNode && currentTopic && !isSubscribed && web3Provider) {
       setupSubscription();
     }
-  }, [wakuNode, currentTopic, setupSubscription, isSubscribed]);
+  }, [wakuNode, currentTopic, setupSubscription, isSubscribed, web3Provider]);
 
   const handleWalletConnect = async (provider: ethers.providers.Web3Provider, connectedAccount: string) => {
     setWeb3Provider(provider);
