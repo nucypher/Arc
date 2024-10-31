@@ -42,7 +42,7 @@ const receivedLocationIcon = new L.Icon({
 const MapUpdater: React.FC<{ center: [number, number] }> = ({ center }) => {
   const map = useMap();
   useEffect(() => {
-    map.setView(center);
+    map.setView(center, 15);
   }, [center, map]);
   return null;
 };
@@ -431,6 +431,16 @@ const MapView: React.FC<MapViewProps> = ({
             );
           });
 
+          // Send initial position
+          await sendLocationUpdate(
+            account,
+            nickname,
+            position.coords.latitude,
+            position.coords.longitude,
+            position.coords.accuracy,
+            true
+          );
+
           // If we got an initial position, start watching with more lenient settings
           console.log('Got initial position, starting watch');
           watchIdRef.current = navigator.geolocation.watchPosition(
@@ -451,27 +461,17 @@ const MapView: React.FC<MapViewProps> = ({
                   position.coords.accuracy,
                   true
                 );
+                setUserPosition([position.coords.latitude, position.coords.longitude]);
+                setLocationError(null);
               } catch (error) {
                 console.error('Failed to send location update:', error);
               }
-
-              if (onShareLocation) {
-                onShareLocation({
-                  lat: position.coords.latitude,
-                  lng: position.coords.longitude
-                });
-              }
-              setLocationError(null);
             },
             (error) => {
-              console.error('Error in live location sharing:', error, {
-                code: error.code,
-                message: error.message
-              });
+              console.error('Error in live location sharing:', error);
               const errorMessage = getGeolocationErrorMessage(error);
               setLocationError(errorMessage);
               
-              // Only stop and retry if it's a timeout error
               if (error.code === error.TIMEOUT) {
                 console.log('Timeout error, retrying with more lenient settings...');
                 stopSharingLocation();
@@ -479,17 +479,15 @@ const MapView: React.FC<MapViewProps> = ({
               }
             },
             {
-              enableHighAccuracy: false, // Less strict accuracy for continuous updates
-              timeout: 15000,           // 15 second timeout
-              maximumAge: 10000,        // Accept positions up to 10 seconds old
-              maximumAge: 10000
+              enableHighAccuracy: false,
+              timeout: 15000,
+              maximumAge: 5000
             }
           );
           console.log('Live sharing watch started with ID:', watchIdRef.current);
           setIsSharing(true);
         } catch (initialError) {
           console.error('Failed to get initial position:', initialError);
-          // Fall back to less accurate watching immediately
           retryWithLongerTimeout();
         }
       } else {
@@ -566,6 +564,11 @@ const MapView: React.FC<MapViewProps> = ({
   useEffect(() => {
     if (centerOnUser && liveLocations.has(centerOnUser)) {
       const userLocation = liveLocations.get(centerOnUser)!;
+      console.log('Centering map on user:', {
+        userId: centerOnUser,
+        lat: userLocation.latitude,
+        lng: userLocation.longitude
+      });
       setDefaultCenter([userLocation.latitude, userLocation.longitude]);
     }
   }, [centerOnUser, liveLocations]);
@@ -685,13 +688,12 @@ const MapView: React.FC<MapViewProps> = ({
         </MapContainer>
       </div>
 
-      {/* Chat messages overlay - adjusted right margin */}
+      {/* Chat messages overlay */}
       <div className="absolute top-32 right-8 bottom-24 w-96 overflow-hidden z-[1000]">
         <div className="h-full overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
           {chatMessages.map((message) => (
-            <div className="backdrop-blur-sm bg-black bg-opacity-30 rounded-lg">
+            <div key={message.id} className="backdrop-blur-sm bg-black bg-opacity-30 rounded-lg">
               <ChatBubble
-                key={message.id}
                 message={message}
                 isCurrentUser={isCurrentUser(message.sender)}
                 canDecrypt={canDecryptMessage(message.condition)}

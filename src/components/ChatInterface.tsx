@@ -86,7 +86,7 @@ const ChatInterfaceInner: React.FC = () => {
   const [isCorrectNetwork, setIsCorrectNetwork] = useState(false);
   const [currentView, setCurrentView] = useState<'chat' | 'map'>('chat');
   const [liveLocations, setLiveLocations] = useState<Map<string, LocationUpdate>>(new Map());
-  const [activeUsers, setActiveUsers] = useState<Map<string, { nickname: string; lastSeen: number }>>(new Map());
+  const [activeUsers, setActiveUsers] = useState<Map<string, { nickname: string; lastSeen: number; address: string }>>(new Map());
   const [centerOnUserId, setCenterOnUserId] = useState<string | undefined>();
 
   useEffect(() => {
@@ -642,7 +642,8 @@ const ChatInterfaceInner: React.FC = () => {
         userId,
         {
           nickname: location.nickname,
-          lastSeen: now
+          lastSeen: now,
+          address: userId
         }
       ])
     ));
