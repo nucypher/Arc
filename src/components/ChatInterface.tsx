@@ -14,6 +14,7 @@ import { switchToPolygonAmoy } from '../utils/ethereum';
 import MapView, { LocationUpdate } from './MapView';
 import { chainIdMapping } from './TacoConditionBuilder';
 import AboutPopup from './AboutPopup';
+import SettingsPane from './SettingsPane';
 
 interface ChatMessage {
   id: number;
@@ -967,6 +968,21 @@ const ChatInterfaceInner: React.FC = () => {
 
       {/* About popup */}
       <AboutPopup isOpen={isAboutOpen} onClose={toggleAbout} />
+
+      {isSettingsOpen && (
+        <SettingsPane
+          onClose={() => setIsSettingsOpen(false)}
+          nickname={nickname}
+          onNicknameChange={handleNicknameChange}
+          onSaveNickname={saveNickname}
+          isEditingNickname={isEditingNickname}
+          setIsEditingNickname={setIsEditingNickname}
+          handleConditionChange={handleConditionChange}
+          handleDomainChange={handleDomainChange}
+          currentDomain={currentDomain}
+          connectedAccount={account}
+        />
+      )}
 
       <style jsx>{`
         @keyframes backgroundMove {
