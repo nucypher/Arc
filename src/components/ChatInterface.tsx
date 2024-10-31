@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ethers } from 'ethers';
 import { initializeTaco, encryptMessage, decryptMessage } from '../lib/tacoSetup';
-import { createNode, subscribeToMessages, sendWakuMessage, defaultContentTopic, getWakuNodeStatus } from '../lib/wakuSetup';
+import { createNode, subscribeToMessages, sendWakuMessage, defaultContentTopic, getWakuNodeStatus, subscribeToLocationUpdates } from '../lib/wakuSetup';
 import { ThresholdMessageKit, domains, conditions } from '@nucypher/taco';
 import WalletConnect from './WalletConnect';
 import TacoConditionBuilder from './TacoConditionBuilder';
@@ -67,6 +67,8 @@ const ChatInterfaceInner: React.FC = () => {
   const [ethereumNetwork, setEthereumNetwork] = useState<string>('Unknown');
   const [isCorrectNetwork, setIsCorrectNetwork] = useState(false);
   const [currentView, setCurrentView] = useState<'chat' | 'map'>('chat');
+  const [liveLocations, setLiveLocations] = useState<Map<string, LocationUpdate>>(new Map());
+  const [activeUsers, setActiveUsers] = useState<Map<string, { nickname: string; lastSeen: number }>>(new Map());
 
   useEffect(() => {
     const init = async () => {
@@ -178,8 +180,9 @@ const ChatInterfaceInner: React.FC = () => {
 
   const setupSubscription = useCallback(async () => {
     if (wakuNode && currentTopic && !isSubscribed) {
-      console.log(`Setting up message subscription for topic: ${currentTopic.name}`);
+      console.log(`Setting up subscriptions for topic: ${currentTopic.name}`);
       try {
+        // Subscribe to regular messages
         await subscribeToMessages(currentTopic.name, async (decodedMessage: any) => {
           setTimeout(async () => {
             console.log('Received message:', decodedMessage);
@@ -254,10 +257,21 @@ const ChatInterfaceInner: React.FC = () => {
             }
           }, 500);
         });
-        console.log(`Successfully set up subscription for topic: ${currentTopic.name}`);
+        
+        // Subscribe to location updates
+        await subscribeToLocationUpdates((update: LocationUpdate) => {
+          console.log('[Location] Received location update:', update);
+          setLiveLocations(prev => {
+            const next = new Map(prev);
+            next.set(update.sender, update);
+            return next;
+          });
+        });
+
+        console.log('Successfully set up all subscriptions');
         setIsSubscribed(true);
       } catch (error) {
-        console.error('Error setting up message subscription:', error);
+        console.error('Error setting up subscriptions:', error);
       }
     }
   }, [wakuNode, currentTopic, web3Provider, currentDomain, account, sentMessages, isSubscribed]);
@@ -592,6 +606,19 @@ const ChatInterfaceInner: React.FC = () => {
     }
   }, [account, web3Provider, condition, currentDomain, ritualId, wakuNode, nickname, currentTopic.name, isSubscribed]);
 
+  useEffect(() => {
+    const now = Date.now();
+    setActiveUsers(new Map(
+      Array.from(liveLocations.entries()).map(([userId, location]) => [
+        userId,
+        {
+          nickname: location.nickname,
+          lastSeen: now
+        }
+      ])
+    ));
+  }, [liveLocations]);
+
   return (
     <div className="flex flex-col h-screen bg-black text-white relative overflow-hidden">
       {/* Subtle blue-black gradient background */}
@@ -686,6 +713,7 @@ const ChatInterfaceInner: React.FC = () => {
             onTopicSelect={handleTopicSelect}
             onTopicCreate={handleTopicCreate}
             backgroundStyle={backgroundStyle}
+            activeUsers={activeUsers}
           />
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="bg-gray-800 px-4 border-b border-gray-700">
@@ -764,6 +792,7 @@ const ChatInterfaceInner: React.FC = () => {
                 onShareLocation={handleLiveLocation}
                 account={account || ''}
                 nickname={nickname}
+                liveLocations={liveLocations}
               />
             )}
           </div>

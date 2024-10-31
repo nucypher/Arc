@@ -51,6 +51,7 @@ interface MapViewProps {
   onShareLocation?: (location: { lat: number; lng: number }) => void;
   account: string;
   nickname: string;
+  liveLocations: Map<string, LocationUpdate>;
 }
 
 interface LocationUpdate {
@@ -133,14 +134,13 @@ const LiveShareControl: React.FC<LiveShareControlProps> = ({
 const DARK_MAP_STYLE = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const DARK_MAP_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
-const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, nickname }) => {
+const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, nickname, liveLocations }) => {
   const [isSharing, setIsSharing] = useState(false);
   const watchIdRef = useRef<number | null>(null);
   const [defaultCenter, setDefaultCenter] = useState<[number, number]>([0, 0]);
   const [hasSetInitialPosition, setHasSetInitialPosition] = useState(false);
   const [userPosition, setUserPosition] = useState<[number, number] | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
-  const [liveLocations, setLiveLocations] = useState<Map<string, LocationUpdate>>(new Map());
   const [isSettingUpSharing, setIsSettingUpSharing] = useState(false); // Add this new state
 
   // Get user's initial position for map center
@@ -295,33 +295,6 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
       return false;
     }
   };
-
-  // Subscribe to location updates
-  useEffect(() => {
-    const setupLocationSubscription = async () => {
-      try {
-        console.log('[Location] Setting up subscription to location updates');
-        await subscribeToLocationUpdates((update: LocationUpdate) => {
-          console.log('[Location] Received location update:', update);
-          setLiveLocations(prev => {
-            const next = new Map(prev);
-            next.set(update.sender, update);
-            return next;
-          });
-        });
-        console.log('[Location] Subscription setup complete');
-      } catch (error) {
-        console.error('[Location] Failed to subscribe to location updates:', error);
-      }
-    };
-
-    setupLocationSubscription();
-
-    // No cleanup needed since Waku doesn't provide an unsubscribe mechanism
-    return () => {
-      console.log('[Location] Component unmounting, subscription will remain active');
-    };
-  }, []);
 
   const startSharingLocation = async () => {
     console.log('Starting location sharing...');
@@ -484,7 +457,34 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
   };
 
   if (!hasSetInitialPosition) {
-    return <div className="flex-1 bg-gray-900 p-4 text-gray-300">Loading map...</div>;
+    return (
+      <div className="flex-1 bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <svg 
+            className="animate-spin h-10 w-10 text-blue-500 mb-4 mx-auto" 
+            xmlns="http://www.w3.org/2000/svg" 
+            fill="none" 
+            viewBox="0 0 24 24"
+          >
+            <circle 
+              className="opacity-25" 
+              cx="12" 
+              cy="12" 
+              r="10" 
+              stroke="currentColor" 
+              strokeWidth="4"
+            />
+            <path 
+              className="opacity-75" 
+              fill="currentColor" 
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            />
+          </svg>
+          <div className="text-blue-400 text-lg font-semibold">Loading map...</div>
+          <div className="text-gray-400 text-sm mt-2">Getting your location</div>
+        </div>
+      </div>
+    );
   }
 
   // Add live location markers to the map

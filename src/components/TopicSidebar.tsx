@@ -1,118 +1,120 @@
-import React, { useState, useCallback, useEffect } from 'react';
-
-interface Topic {
-  name: string;
-  lastMessage?: string;
-  lastMessageTime?: number;
-}
+import React, { useState } from 'react';
 
 interface TopicSidebarProps {
-  topics: Topic[];
+  topics: Array<{
+    name: string;
+    lastMessage?: string;
+    lastMessageTime?: number;
+  }>;
   currentTopic: string;
-  onTopicSelect: (topic: string) => void;
-  onTopicCreate: (topic: string) => void;
+  onTopicSelect: (topic: { name: string }) => void;
+  onTopicCreate: (name: string) => void;
   backgroundStyle: React.CSSProperties;
+  activeUsers?: Map<string, { nickname: string; lastSeen: number; address: string }>;
 }
 
-const TopicSidebar: React.FC<TopicSidebarProps> = ({ topics, currentTopic, onTopicSelect, onTopicCreate, backgroundStyle }) => {
-  const [newTopic, setNewTopic] = useState('');
-  const [sidebarWidth, setSidebarWidth] = useState(540); // Increased from 400 to 540 (35% wider)
-  const [isResizing, setIsResizing] = useState(false);
+const TopicSidebar: React.FC<TopicSidebarProps> = ({
+  topics,
+  currentTopic,
+  onTopicSelect,
+  onTopicCreate,
+  backgroundStyle,
+  activeUsers = new Map()
+}) => {
+  const [newTopicName, setNewTopicName] = useState('');
+  const [isCreatingTopic, setIsCreatingTopic] = useState(false);
 
-  const handleCreateTopic = () => {
-    if (newTopic.trim()) {
-      onTopicCreate(newTopic.trim());
-      setNewTopic('');
+  const handleCreateTopic = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newTopicName.trim()) {
+      onTopicCreate(newTopicName.trim());
+      setNewTopicName('');
+      setIsCreatingTopic(false);
     }
   };
 
-  const startResizing = useCallback(() => {
-    setIsResizing(true);
-  }, []);
-
-  const stopResizing = useCallback(() => {
-    setIsResizing(false);
-  }, []);
-
-  const resize = useCallback(
-    (mouseMoveEvent: MouseEvent) => {
-      if (isResizing) {
-        setSidebarWidth(mouseMoveEvent.clientX);
-      }
-    },
-    [isResizing]
-  );
-
-  useEffect(() => {
-    window.addEventListener('mousemove', resize);
-    window.addEventListener('mouseup', stopResizing);
-    return () => {
-      window.removeEventListener('mousemove', resize);
-      window.removeEventListener('mouseup', stopResizing);
-    };
-  }, [resize, stopResizing]);
-
-  const truncateMessage = (message: string, maxLength: number) => {
-    return message.length > maxLength ? message.substring(0, maxLength) + '...' : message;
+  const getTopicName = (fullPath: string) => {
+    return fullPath.split('/').pop() || fullPath;
   };
 
-  const formatTime = (timestamp: number) => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const truncateAddress = (address: string) => {
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
   return (
-    <div 
-      className="bg-black bg-opacity-50 text-gray-300 h-full relative"
-      style={{ width: sidebarWidth, minWidth: '470px', maxWidth: '50%' }}
-    >
-      <div className="absolute inset-0" style={backgroundStyle}></div>
-      <div className="relative z-10 p-4 overflow-y-auto h-full">
-        <ul className="mb-4 space-y-2">
-          {topics.map((topic) => (
-            <li
-              key={topic.name}
-              className={`cursor-pointer p-3 rounded transition-colors duration-150 ease-in-out ${
-                topic.name === currentTopic ? 'bg-gray-900 text-white' : 'hover:bg-gray-800'
-              }`}
-              onClick={() => onTopicSelect(topic.name)}
-            >
-              <div className="font-medium mb-1">{topic.name}</div>
-              {topic.lastMessage && (
-                <div className="text-sm text-gray-500">
-                  {truncateMessage(topic.lastMessage, 40)}
-                </div>
-              )}
-              {topic.lastMessageTime && (
-                <div className="text-xs text-gray-600 mt-1">
-                  {formatTime(topic.lastMessageTime)}
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-        <div className="mt-4">
-          <input
-            type="text"
-            value={newTopic}
-            onChange={(e) => setNewTopic(e.target.value)}
-            className="w-full p-2 bg-gray-900 text-gray-300 border border-gray-700 rounded focus:outline-none focus:border-gray-500"
-            placeholder="New topic name"
-          />
+    <div className="w-64 bg-gray-900 border-r border-gray-800 overflow-y-auto">
+      <div className="p-4">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold text-gray-200">Topics</h2>
           <button
-            onClick={handleCreateTopic}
-            className="w-full mt-2 p-2 bg-gray-800 text-gray-200 rounded hover:bg-gray-700 transition-colors duration-150 ease-in-out"
+            onClick={() => setIsCreatingTopic(true)}
+            className="text-blue-400 hover:text-blue-300 transition-colors duration-200"
+            title="Create new topic"
           >
-            Create New Topic
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
           </button>
         </div>
+
+        {isCreatingTopic && (
+          <form onSubmit={handleCreateTopic} className="mb-4">
+            <input
+              type="text"
+              value={newTopicName}
+              onChange={(e) => setNewTopicName(e.target.value)}
+              placeholder="New topic name"
+              className="w-full px-3 py-2 bg-gray-800 text-gray-200 rounded border border-gray-700 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder-gray-500"
+            />
+          </form>
+        )}
+
+        <div className="space-y-1">
+          {topics.map((topic) => (
+            <div key={topic.name} className="space-y-1">
+              <button
+                onClick={() => onTopicSelect(topic)}
+                className={`w-full text-left px-3 py-2 rounded transition-colors duration-150 ${
+                  currentTopic === topic.name
+                    ? 'bg-blue-600 bg-opacity-50 text-white border border-blue-500'
+                    : 'text-gray-300 hover:bg-gray-800 hover:text-gray-100'
+                }`}
+              >
+                <div className="flex items-center">
+                  <span className="text-gray-400 mr-2">#</span>
+                  <span>{getTopicName(topic.name)}</span>
+                </div>
+              </button>
+              
+              {/* Show channel members if this is the current topic */}
+              {currentTopic === topic.name && activeUsers.size > 0 && (
+                <div className="bg-gray-800 bg-opacity-50 rounded">
+                  <div className="px-3 py-2 text-xs text-gray-500 uppercase tracking-wider border-b border-gray-700">
+                    Online
+                  </div>
+                  <div className="py-1">
+                    {Array.from(activeUsers.entries()).map(([userId, user]) => (
+                      <div 
+                        key={userId} 
+                        className="px-3 py-1 flex items-center text-sm text-gray-400 hover:bg-gray-700 transition-colors duration-150"
+                        title={userId} // Show full address on hover
+                      >
+                        <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                        <span className="truncate flex-1">
+                          {user.nickname === 'Anonymous' ? truncateAddress(userId) : user.nickname}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
-      <div
-        className="absolute top-0 right-0 w-px h-full bg-gray-800 cursor-col-resize"
-        onMouseDown={startResizing}
-      />
     </div>
   );
 };
 
 export default TopicSidebar;
+
