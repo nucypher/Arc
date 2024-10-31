@@ -410,21 +410,11 @@ const MapView: React.FC<MapViewProps> = ({
       return false;
     }
   };
-
   const startLocationWatch = useCallback((options: PositionOptions = {}) => {
     if ("geolocation" in navigator) {
-      console.log('Starting location watch with options:', options);
-      
       // Don't request permission here, just start watching
       const watchId = navigator.geolocation.watchPosition(
         async (position) => {
-          console.log('Position update received:', {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-            accuracy: position.coords.accuracy,
-            timestamp: new Date(position.timestamp).toISOString()
-          });
-          
           setUserPosition([position.coords.latitude, position.coords.longitude]);
           setIsReconnecting(false);
 

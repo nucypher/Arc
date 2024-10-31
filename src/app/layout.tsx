@@ -4,8 +4,8 @@ import { Inter } from 'next/font/google'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata = {
-  title: 'Groups Chat',
-  description: 'A simple groups chat interface',
+  title: 'Arc',
+  description: 'Privacy-preserving location sharing with Waku x Taco',
 }
 
 export default function RootLayout({

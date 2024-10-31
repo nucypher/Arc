@@ -11,8 +11,9 @@ export const messageEncoder = createEncoder({ contentTopic: defaultContentTopic,
 export const locationEncoder = createEncoder({ contentTopic: locationContentTopic, ephemeral: true });
 
 let wakuNode: any = null;
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_DELAY = 2000; // 2 seconds
 
-// Define message structure
 export const Message = new protobuf.Type('Message')
   .add(new protobuf.Field('timestamp', 1, 'uint64'))
   .add(new protobuf.Field('sender', 2, 'string'))
@@ -20,7 +21,6 @@ export const Message = new protobuf.Type('Message')
   .add(new protobuf.Field('content', 4, 'bytes'))
   .add(new protobuf.Field('condition', 5, 'string'));
 
-// Define location update message structure
 export const LocationUpdate = new protobuf.Type('LocationUpdate')
   .add(new protobuf.Field('timestamp', 1, 'uint64'))
   .add(new protobuf.Field('sender', 2, 'string'))
@@ -30,13 +30,56 @@ export const LocationUpdate = new protobuf.Type('LocationUpdate')
 
 export const createNode = async () => {
   console.log('Creating Waku node...');
-  wakuNode = await createLightNode({ defaultBootstrap: true });
-  console.log('Waku node created, starting...');
-  await wakuNode.start();
-  console.log('Waku node started, waiting for remote peer...');
-  await wakuNode.waitForPeers(wakuNode, [Protocols.LightPush, Protocols.Filter]);
-  console.log('Waku node fully initialized and connected to remote peer');
-  return wakuNode;
+  
+  for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+    try {
+      if (!wakuNode) {
+        wakuNode = await createLightNode({ defaultBootstrap: true });
+      }
+      
+      console.log('Waku node created, starting...');
+      await wakuNode.start();
+      console.log('Waku node started, waiting for remote peer...');
+      
+      try {
+        await Promise.race([
+          wakuNode.waitForPeers([Protocols.LightPush, Protocols.Filter]),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Peer connection timeout')), 10000)
+          )
+        ]);
+        console.log('Waku node fully initialized and connected to remote peer');
+        return wakuNode;
+      } catch (peerError) {
+        console.warn(`Attempt ${attempt}: Failed to connect to remote peer:`, peerError);
+        if (attempt === MAX_RETRY_ATTEMPTS) {
+          throw peerError;
+        }
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        continue;
+      }
+    } catch (error) {
+      console.error(`Attempt ${attempt}: Failed to create/start Waku node:`, error);
+      if (attempt === MAX_RETRY_ATTEMPTS) {
+        throw error;
+      }
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      
+      // Clean up failed node
+      if (wakuNode) {
+        try {
+          await wakuNode.stop();
+        } catch (stopError) {
+          console.warn('Error stopping failed Waku node:', stopError);
+        }
+        wakuNode = null;
+      }
+    }
+  }
+  
+  throw new Error('Failed to initialize Waku node after all retry attempts');
 };
 
 export const getWakuNodeStatus = () => {
