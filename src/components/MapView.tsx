@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { sendLocationUpdate, subscribeToLocationUpdates } from '../lib/wakuSetup';
 import Blockie from './Blockie';
+import makeBlockie from 'ethereum-blockies-base64';
 
 // Fix for default marker icons in react-leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -135,6 +136,27 @@ const LiveShareControl: React.FC<LiveShareControlProps> = ({
 // Add this dark style URL for the map tiles
 const DARK_MAP_STYLE = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const DARK_MAP_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+
+// Remove the previous icon definitions and add this new function
+const createBlockieMarker = (address: string, isUser: boolean = false) => {
+  const blockieUrl = makeBlockie(address);
+  
+  return new L.DivIcon({
+    html: `
+      <div class="relative">
+        <img 
+          src="${blockieUrl}" 
+          class="w-8 h-8 rounded-full border-2 ${isUser ? 'border-blue-500' : 'border-yellow-500'} shadow-lg"
+        />
+        ${isUser ? '<div class="absolute -bottom-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-gray-900"></div>' : ''}
+      </div>
+    `,
+    className: 'custom-blockie-marker',
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+    popupAnchor: [0, -32]
+  });
+};
 
 const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, nickname, liveLocations, centerOnUser }) => {
   const [isSharing, setIsSharing] = useState(false);
@@ -550,7 +572,7 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
             />
             {/* User position marker */}
             {userPosition && (
-              <Marker position={userPosition} icon={userIcon}>
+              <Marker position={userPosition} icon={createBlockieMarker(account, true)}>
                 <Popup className="dark-theme-popup">
                   <div className="text-gray-200 bg-gray-800 p-2 rounded">
                     <div className="flex items-center">
@@ -567,7 +589,7 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
               <Marker 
                 key={index} 
                 position={marker.position}
-                icon={receivedLocationIcon}
+                icon={createBlockieMarker(marker.sender)}
               >
                 <Popup className="dark-theme-popup">
                   <div className="text-gray-200 bg-gray-800 p-2 rounded">
