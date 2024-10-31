@@ -10,7 +10,8 @@ const Message = new protobuf.Type('Message')
   .add(new protobuf.Field('timestamp', 1, 'uint64'))
   .add(new protobuf.Field('sender', 2, 'string'))
   .add(new protobuf.Field('nickname', 3, 'string'))
-  .add(new protobuf.Field('content', 4, 'bytes'));
+  .add(new protobuf.Field('content', 4, 'bytes'))
+  .add(new protobuf.Field('condition', 5, 'string'));
 
 export const createNode = async () => {
   console.log('Creating Waku node...');
@@ -57,7 +58,7 @@ export const subscribeToMessages = async (topic: string, callback: (message: any
   }
 };
 
-export const sendWakuMessage = async (topic: string, sender: string, messageKit: Uint8Array, nickname: string) => {
+export const sendWakuMessage = async (topic: string, sender: string, messageKit: Uint8Array, nickname: string, condition: string) => {
   if (!wakuNode) throw new Error('Waku node not initialized');
 
   const protoMessage = Message.create({
@@ -65,6 +66,7 @@ export const sendWakuMessage = async (topic: string, sender: string, messageKit:
     sender,
     nickname,
     content: messageKit,
+    condition,
   });
 
   const serializedMessage = Message.encode(protoMessage).finish();

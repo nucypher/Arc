@@ -21,6 +21,7 @@ interface Message {
   encrypted: boolean;
   messageKit?: ThresholdMessageKit;
   decrypted?: string;
+  condition?: string; // Add this line
 }
 
 interface Topic {
@@ -57,7 +58,8 @@ const ChatInterfaceInner: React.FC = () => {
   const [wakuNode, setWakuNode] = useState<any>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
-  const [sentMessageIds, setSentMessageIds] = useState<Set<number>>(new Set());
+  const [sentMessages, setSentMessages] = useState<Map<string, number>>(new Map());
+  const [isSubscribed, setIsSubscribed] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -141,51 +143,76 @@ const ChatInterfaceInner: React.FC = () => {
   }, []);
 
   const setupSubscription = useCallback(async () => {
-    if (wakuNode && currentTopic) {
+    if (wakuNode && currentTopic && !isSubscribed) {
       console.log(`Setting up message subscription for topic: ${currentTopic.name}`);
       try {
         await subscribeToMessages(currentTopic.name, async (decodedMessage: any) => {
-          console.log('Received message:', decodedMessage);
-          // Check if the message is from the current user
-          if (decodedMessage.sender === account && sentMessageIds.has(decodedMessage.timestamp)) {
-            console.log('Ignoring message from self');
-            return; // Skip processing messages from self
-          }
-          try {
-            console.log('Attempting to decrypt message...');
-            const messageKit = ThresholdMessageKit.fromBytes(decodedMessage.content);
-            const decrypted = await decryptMessage(messageKit, web3Provider, currentDomain);
-            const decryptedContent = new TextDecoder().decode(decrypted);
-            console.log('Message decrypted successfully:', decryptedContent);
+          // Implement a short delay before processing the message
+          setTimeout(async () => {
+            console.log('Received message:', decodedMessage);
+            console.log('Current account:', account);
+            console.log('Sent messages:', Array.from(sentMessages.entries()));
+            
+            const messageKey = `${decodedMessage.sender}-${decodedMessage.timestamp}`;
+            if (sentMessages.has(messageKey)) {
+              console.log('Ignoring message from self (found in sentMessages)');
+              return;
+            }
 
-            const newMessage: Message = {
-              id: decodedMessage.timestamp,
-              sender: decodedMessage.sender,
-              senderNickname: decodedMessage.nickname,
-              content: decryptedContent,
-              timestamp: decodedMessage.timestamp,
-              encrypted: false,
-            };
-            setMessages(prevMessages => {
-              const updatedMessages = [...prevMessages, newMessage];
-              return updatedMessages.sort((a, b) => a.timestamp - b.timestamp);
-            });
-          } catch (error) {
-            console.error('Error processing received message:', error);
-          }
+            try {
+              console.log('Attempting to decrypt message...');
+              const messageKit = ThresholdMessageKit.fromBytes(decodedMessage.content);
+              const decrypted = await decryptMessage(messageKit, web3Provider, currentDomain);
+              const decryptedContent = new TextDecoder().decode(decrypted);
+              console.log('Message decrypted successfully:', decryptedContent);
+
+              const newMessage: Message = {
+                id: decodedMessage.timestamp,
+                sender: decodedMessage.sender,
+                senderNickname: decodedMessage.nickname,
+                content: decryptedContent,
+                timestamp: decodedMessage.timestamp,
+                encrypted: true,
+                decrypted: decryptedContent,
+                condition: decodedMessage.condition,
+              };
+              setMessages(prevMessages => {
+                const updatedMessages = [...prevMessages, newMessage];
+                return updatedMessages.sort((a, b) => a.timestamp - b.timestamp);
+              });
+            } catch (error) {
+              console.error('Error processing received message:', error);
+              // Add a message bubble for undecryptable messages
+              const newMessage: Message = {
+                id: decodedMessage.timestamp,
+                sender: decodedMessage.sender,
+                senderNickname: decodedMessage.nickname,
+                content: '[Encrypted Message]',
+                timestamp: decodedMessage.timestamp,
+                encrypted: true,
+                decrypted: undefined,
+                condition: decodedMessage.condition,
+              };
+              setMessages(prevMessages => {
+                const updatedMessages = [...prevMessages, newMessage];
+                return updatedMessages.sort((a, b) => a.timestamp - b.timestamp);
+              });
+            }
+          }, 500); // 500ms delay
         });
         console.log(`Successfully set up subscription for topic: ${currentTopic.name}`);
+        setIsSubscribed(true);
       } catch (error) {
         console.error('Error setting up message subscription:', error);
       }
     }
-  }, [wakuNode, currentTopic, web3Provider, currentDomain, account, sentMessageIds]);
+  }, [wakuNode, currentTopic, web3Provider, currentDomain, account, sentMessages, isSubscribed]);
 
   useEffect(() => {
-    if (wakuNode && currentTopic) {
+    if (wakuNode && currentTopic && !isSubscribed) {
       setupSubscription();
     }
-  }, [wakuNode, currentTopic, setupSubscription]);
+  }, [wakuNode, currentTopic, setupSubscription, isSubscribed]);
 
   const handleWalletConnect = async (provider: ethers.providers.Web3Provider, connectedAccount: string) => {
     setWeb3Provider(provider);
@@ -246,8 +273,8 @@ const ChatInterfaceInner: React.FC = () => {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() || !account || !web3Provider || !condition) {
-      setError("Please ensure you're connected and have set a condition before sending a message.");
+    if (!inputText.trim() || !account || !web3Provider || !condition || !isSubscribed) {
+      setError("Please ensure you're connected, have set a condition, and the subscription is set up before sending a message.");
       return;
     }
 
@@ -262,24 +289,29 @@ const ChatInterfaceInner: React.FC = () => {
       if (wakuNode) {
         console.log('Sending encrypted message via Waku...');
         const messageKitBytes = messageKit.toBytes();
-        await sendWakuMessage(currentTopic.name, account, messageKitBytes, nickname);
+        const conditionString = JSON.stringify(condition);
+        const timestamp = Date.now();
+        await sendWakuMessage(currentTopic.name, account, messageKitBytes, nickname, conditionString);
         console.log('Encrypted message sent via Waku');
         
-        const newMessageId = Date.now();
+        const messageKey = `${account}-${timestamp}`;
+        setSentMessages(prev => new Map(prev).set(messageKey, timestamp));
+        console.log('Updated sentMessages:', Array.from(sentMessages.entries()));
+
         const newMessage: Message = {
-          id: newMessageId,
+          id: timestamp,
           sender: account,
           senderNickname: nickname,
           content: inputText.trim(),
-          timestamp: newMessageId,
+          timestamp: timestamp,
           encrypted: true,
           decrypted: inputText.trim(),
+          condition: conditionString,
         };
         setMessages(prevMessages => {
           const updatedMessages = [...prevMessages, newMessage];
           return updatedMessages.sort((a, b) => a.timestamp - b.timestamp);
         });
-        setSentMessageIds(prev => new Set(prev).add(newMessageId));
         setInputText('');
       } else {
         console.warn('Waku is not initialized. Message encrypted but not sent.');

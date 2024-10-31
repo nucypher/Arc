@@ -9,12 +9,15 @@ interface ChatBubbleProps {
     timestamp: number;
     encrypted: boolean;
     decrypted?: string;
+    condition?: string;
   };
   isCurrentUser: boolean;
 }
 
 const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isCurrentUser }) => {
-  const displayContent = message.encrypted ? message.decrypted || message.content : message.content;
+  const displayContent = message.encrypted
+    ? message.decrypted || '[Unable to decrypt]'
+    : message.content;
 
   return (
     <div 
@@ -32,7 +35,15 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isCurrentUser }) => {
         </div>
         <div className="break-words">
           {displayContent}
+          {message.encrypted && !message.decrypted && (
+            <span className="text-xs text-yellow-300 ml-2">[Encrypted]</span>
+          )}
         </div>
+        {message.condition && (
+          <div className="text-xs text-gray-400 mt-2">
+            Condition: {message.condition}
+          </div>
+        )}
         <div className="text-xs text-gray-400 mt-2">
           {new Date(message.timestamp).toLocaleString()}
         </div>
