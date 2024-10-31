@@ -13,6 +13,7 @@ import TopicSidebar from './TopicSidebar';
 import ChatBubble from './ChatBubble';
 import { FaExclamationCircle, FaMapMarkerAlt } from 'react-icons/fa'; // Change to circle icon
 import { switchToPolygonAmoy } from '../utils/ethereum';
+import MapView from './MapView';
 
 interface Message {
   id: number;
@@ -65,6 +66,7 @@ const ChatInterfaceInner: React.FC = () => {
   const [decryptingMessages, setDecryptingMessages] = useState<Set<number>>(new Set());
   const [ethereumNetwork, setEthereumNetwork] = useState<string>('Unknown');
   const [isCorrectNetwork, setIsCorrectNetwork] = useState(false);
+  const [currentView, setCurrentView] = useState<'chat' | 'map'>('chat');
 
   useEffect(() => {
     const init = async () => {
@@ -548,23 +550,47 @@ const ChatInterfaceInner: React.FC = () => {
     }
   };
 
-  const handleShareLocation = async () => {
-    if ("geolocation" in navigator) {
-      try {
-        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject);
-        });
-        
-        const locationMessage = `📍 Location: https://www.google.com/maps?q=${position.coords.latitude},${position.coords.longitude}`;
-        setInputText(locationMessage);
-      } catch (error) {
-        console.error('Error getting location:', error);
-        setError('Unable to get your location. Please make sure location services are enabled.');
-      }
-    } else {
-      setError('Geolocation is not supported by your browser.');
+  const handleLiveLocation = useCallback(async (location: { lat: number; lng: number }) => {
+    if (!account || !web3Provider || !condition || !isSubscribed) {
+      setError("Please ensure you're connected and have set a condition before sharing location.");
+      return;
     }
-  };
+
+    const locationMessage = `📍 Location: https://www.google.com/maps?q=${location.lat},${location.lng}`;
+    
+    try {
+      const messageKit = await encryptMessage(locationMessage, web3Provider, condition, currentDomain, ritualId);
+      
+      if (wakuNode) {
+        const messageKitBytes = messageKit.toBytes();
+        const conditionString = JSON.stringify(condition);
+        const timestamp = Date.now();
+        await sendWakuMessage(currentTopic.name, account, messageKitBytes, nickname, conditionString);
+        
+        const messageKey = `${account}-${timestamp}`;
+        setSentMessages(prev => new Map(prev).set(messageKey, timestamp));
+
+        const newMessage: Message = {
+          id: timestamp,
+          sender: account,
+          senderNickname: nickname,
+          content: locationMessage,
+          timestamp: timestamp,
+          encrypted: true,
+          decrypted: locationMessage,
+          condition: conditionString,
+        };
+        
+        setFilteredMessages(prevMessages => {
+          const updatedMessages = [...prevMessages, newMessage];
+          return updatedMessages.sort((a, b) => a.timestamp - b.timestamp);
+        });
+      }
+    } catch (error) {
+      console.error('Error sending location:', error);
+      setError('Failed to send location update');
+    }
+  }, [account, web3Provider, condition, currentDomain, ritualId, wakuNode, nickname, currentTopic.name, isSubscribed]);
 
   return (
     <div className="flex flex-col h-screen bg-black text-white relative overflow-hidden">
@@ -662,93 +688,82 @@ const ChatInterfaceInner: React.FC = () => {
             backgroundStyle={backgroundStyle}
           />
           <div className="flex-1 flex flex-col overflow-hidden">
-            {isSettingsOpen && (
-              <div className="p-6 bg-gray-900 border-b border-gray-800 overflow-y-auto">
-                <h2 className="text-2xl font-bold mb-6 text-gray-100">Settings</h2>
-                <div className="space-y-8">
-                  <div className="bg-black p-6 rounded-lg border border-gray-800 shadow-lg">
-                    <h3 className="text-lg font-semibold mb-4 text-gray-200">Nickname</h3>
-                    {isEditingNickname ? (
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="text"
-                          value={nickname}
-                          onChange={handleNicknameChange}
-                          className="flex-grow px-4 py-2 bg-gray-800 text-white border border-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200"
-                          placeholder="Enter nickname"
-                        />
-                        <button
-                          onClick={saveNickname}
-                          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200"
-                        >
-                          Save
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-300 text-lg">{nickname}</span>
-                        <button
-                          onClick={() => setIsEditingNickname(true)}
-                          className="px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-600 transition-colors duration-200"
-                        >
-                          Edit
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  <div className="bg-black p-6 rounded-lg border border-gray-800 shadow-lg">
-                    <h3 className="text-lg font-semibold mb-4 text-gray-200">Taco Domain</h3>
-                    <TacoDomainSelector currentDomain={currentDomain} onDomainChange={handleDomainChange} />
-                  </div>
-                  <div className="bg-black p-6 rounded-lg border border-gray-800 shadow-lg">
-                    <h3 className="text-lg font-semibold mb-4 text-gray-200">Taco Condition</h3>
-                    <TacoConditionBuilder onConditionChange={handleConditionChange} />
+            <div className="bg-gray-800 px-4 border-b border-gray-700">
+              <div className="flex space-x-4">
+                <button
+                  onClick={() => setCurrentView('chat')}
+                  className={`py-2 px-4 focus:outline-none ${
+                    currentView === 'chat'
+                      ? 'text-blue-400 border-b-2 border-blue-400'
+                      : 'text-gray-400 hover:text-gray-300'
+                  }`}
+                >
+                  Chat
+                </button>
+                <button
+                  onClick={() => setCurrentView('map')}
+                  className={`py-2 px-4 focus:outline-none ${
+                    currentView === 'map'
+                      ? 'text-blue-400 border-b-2 border-blue-400'
+                      : 'text-gray-400 hover:text-gray-300'
+                  }`}
+                >
+                  Map
+                </button>
+              </div>
+            </div>
+
+            {currentView === 'chat' ? (
+              <>
+                <div className="flex-grow overflow-y-auto p-4">
+                  <div className="space-y-4">
+                    {filterMessages(messages).map((message) => (
+                      <ChatBubble
+                        key={message.id}
+                        message={message}
+                        isCurrentUser={message.sender === account}
+                        canDecrypt={canDecryptMessage(message.condition)}
+                        isDecrypting={decryptingMessages.has(message.id)}
+                        onRetryDecryption={handleRetryDecryption}
+                      />
+                    ))}
                   </div>
                 </div>
-              </div>
+                <div className="p-4 border-t border-gray-800">
+                  <form onSubmit={handleSendMessage} className="flex space-x-2">
+                    <input
+                      type="text"
+                      value={inputText}
+                      onChange={(e) => setInputText(e.target.value)}
+                      className="flex-grow px-4 py-2 bg-gray-800 text-white border border-gray-700 rounded-l focus:outline-none focus:ring-2 focus:ring-gray-600"
+                      placeholder="Type your message..."
+                    />
+                    <button
+                      type="button"
+                      onClick={handleLiveLocation}
+                      className="px-4 py-2 bg-gray-700 text-white hover:bg-gray-600 transition-colors duration-200 flex items-center justify-center"
+                      title="Share location"
+                    >
+                      <FaMapMarkerAlt size={20} />
+                    </button>
+                    <button 
+                      type="submit" 
+                      className="px-4 py-2 bg-blue-600 text-white rounded-r hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center"
+                      disabled={!condition || !web3Provider}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                      </svg>
+                    </button>
+                  </form>
+                </div>
+              </>
+            ) : (
+              <MapView 
+                messages={messages} 
+                onShareLocation={handleLiveLocation}
+              />
             )}
-            <div className="flex-grow overflow-y-auto p-4">
-              <div className="space-y-4">
-                {filterMessages(messages).map((message) => (
-                  <ChatBubble
-                    key={message.id}
-                    message={message}
-                    isCurrentUser={message.sender === account}
-                    canDecrypt={canDecryptMessage(message.condition)}
-                    isDecrypting={decryptingMessages.has(message.id)}
-                    onRetryDecryption={handleRetryDecryption}
-                  />
-                ))}
-              </div>
-            </div>
-            <div className="p-4 border-t border-gray-800">
-              <form onSubmit={handleSendMessage} className="flex space-x-2">
-                <input
-                  type="text"
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  className="flex-grow px-4 py-2 bg-gray-800 text-white border border-gray-700 rounded-l focus:outline-none focus:ring-2 focus:ring-gray-600"
-                  placeholder="Type your message..."
-                />
-                <button
-                  type="button"
-                  onClick={handleShareLocation}
-                  className="px-4 py-2 bg-gray-700 text-white hover:bg-gray-600 transition-colors duration-200 flex items-center justify-center"
-                  title="Share location"
-                >
-                  <FaMapMarkerAlt size={20} />
-                </button>
-                <button 
-                  type="submit" 
-                  className="px-4 py-2 bg-blue-600 text-white rounded-r hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center"
-                  disabled={!condition || !web3Provider}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
-                  </svg>
-                </button>
-              </form>
-            </div>
           </div>
         </div>
       </div>
