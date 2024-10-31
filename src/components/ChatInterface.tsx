@@ -15,6 +15,8 @@ import MapView, { LocationUpdate } from './MapView';
 import { chainIdMapping } from './TacoConditionBuilder';
 import AboutPopup from './AboutPopup';
 import SettingsPane from './SettingsPane';
+import { useSwitchNetwork, WagmiConfig } from 'wagmi';
+import { wagmiConfig } from './WalletConnect';
 
 interface ChatMessage {
   id: number;
@@ -98,6 +100,11 @@ const ChatInterfaceInner: React.FC = () => {
 
   // Add this near the top with other refs
   const hasAttemptedNetworkSwitch = useRef(false);
+
+  // Add the useSwitchNetwork hook at component level
+  const { switchNetwork } = useSwitchNetwork({
+    chainId: 80002, // Polygon Amoy
+  });
 
   useEffect(() => {
     const init = async () => {
@@ -349,23 +356,14 @@ const ChatInterfaceInner: React.FC = () => {
       const isAmoy = network.chainId === 80002;
       setIsCorrectNetwork(isAmoy);
 
-      // If not on Amoy, prompt to switch
-      if (!isAmoy) {
-        console.log('Not on Polygon Amoy, prompting switch...');
-        const switched = await switchToPolygonAmoy();
-        if (switched) {
-          console.log('Successfully switched to Polygon Amoy');
-          await initializeNewProvider();
-        } else {
-          console.log('Network switch pending - waiting for user action');
-        }
-      }
-
       // Create a single handler for network changes
       const handleChainChange = async (chainId: string) => {
         console.log('Network changed to:', chainId);
         const newChainId = parseInt(chainId, 16);
         setIsCorrectNetwork(newChainId === 80002);
+        if (newChainId === 80002) {
+          setEthereumNetwork('amoy');
+        }
         await initializeNewProvider();
       };
 
@@ -811,6 +809,23 @@ const ChatInterfaceInner: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Update the alert button click handler
+  const handleNetworkSwitch = async () => {
+    try {
+      if (switchNetwork) {
+        await switchNetwork();
+        
+        // Get fresh provider after switch
+        if (web3Provider) {
+          const network = await web3Provider.getNetwork();
+          setIsCorrectNetwork(network.chainId === 80002);
+        }
+      }
+    } catch (error) {
+      console.error('Error switching network:', error);
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-black text-white relative overflow-hidden">
       {/* Subtle blue-black gradient background */}
@@ -861,7 +876,7 @@ const ChatInterfaceInner: React.FC = () => {
             <div className="flex items-center space-x-2">
               {!isCorrectNetwork && (
                 <button 
-                  onClick={switchToPolygonAmoy}
+                  onClick={handleNetworkSwitch}
                   className="h-8 w-8 flex items-center justify-center text-yellow-500 hover:text-yellow-400 transition-colors duration-200 bg-gray-800 rounded hover:bg-gray-700"
                   title="Click to switch to Polygon Amoy"
                 >
@@ -875,7 +890,7 @@ const ChatInterfaceInner: React.FC = () => {
               >
                 About
               </button>
-              <div className="w-px h-8 bg-gray-700"></div> {/* Vertical divider */}
+              <div className="w-px h-8 bg-gray-700"></div>
               <button
                 onClick={toggleSettings}
                 className="h-8 w-8 bg-gray-800 text-white text-sm rounded hover:bg-gray-700 transition-colors duration-200 flex items-center justify-center"
@@ -1000,7 +1015,9 @@ const ChatInterfaceInner: React.FC = () => {
 
 const ChatInterface: React.FC = () => {
   return (
+    <WagmiConfig config={wagmiConfig}>
       <ChatInterfaceInner />
+    </WagmiConfig>
   );
 };
 

@@ -5,7 +5,7 @@ import { ethers } from 'ethers';
 import Blockie from './Blockie';
 import { Web3Modal, useWeb3Modal } from '@web3modal/react';
 import { EthereumClient, w3mConnectors, w3mProvider } from '@web3modal/ethereum';
-import { configureChains, createConfig, WagmiConfig, useAccount, useConnect, useDisconnect } from 'wagmi';
+import { configureChains, createConfig, WagmiConfig, useAccount, useConnect, useDisconnect, useSwitchNetwork, useNetwork } from 'wagmi';
 import { Chain } from 'wagmi/chains';
 
 interface WalletConnectProps {
@@ -38,15 +38,15 @@ const chains = [polygonAmoy];
 const projectId = 'ad30b976755707360bac24e9e8f0d682';
 
 const { publicClient } = configureChains(chains, [w3mProvider({ projectId })]);
-const wagmiConfig = createConfig({
-  autoConnect: true,
+export const wagmiConfig = createConfig({
+  autoConnect: false,
   connectors: w3mConnectors({ 
     projectId, 
     chains,
     version: 2,
     includeWalletConnect: true,
     includeCoinbaseWallet: false,
-    includeInjected: true, // MetaMask and similar injected wallets
+    includeInjected: true,
     includeMetaMask: true,
   }),
   publicClient
@@ -58,59 +58,37 @@ const WalletConnectButton: React.FC<WalletConnectProps> = ({ onConnect, connecte
   const { open } = useWeb3Modal();
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
+  const { switchNetwork } = useSwitchNetwork();
+  const { chain } = useNetwork();
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  const addPolygonAmoyNetwork = async () => {
-    if (!window.ethereum) return;
-
-    try {
-      await window.ethereum.request({
-        method: 'wallet_addEthereumChain',
-        params: [{
-          chainId: '0x13882', // 80002 in hex
-          chainName: 'Polygon Amoy',
-          nativeCurrency: {
-            name: 'MATIC',
-            symbol: 'MATIC',
-            decimals: 18
-          },
-          rpcUrls: ['https://rpc-amoy.polygon.technology'],
-          blockExplorerUrls: ['https://www.oklink.com/amoy']
-        }]
-      });
-    } catch (error) {
-      console.error('Error adding Polygon Amoy network:', error);
-    }
-  };
 
   useEffect(() => {
     const handleConnection = async () => {
       if (isConnected && address && window.ethereum && !connectedAccount) {
         const provider = new ethers.providers.Web3Provider(window.ethereum);
-        const network = await provider.getNetwork();
         
-        // If not on Polygon Amoy, try to add the network first
-        if (network.chainId !== 80002) {
-          await addPolygonAmoyNetwork();
+        // Check if we're on the correct network using wagmi's chain info
+        if (chain?.id !== 80002) {
+          console.log('Not on Polygon Amoy, switching networks...');
           try {
-            await window.ethereum.request({
-              method: 'wallet_switchEthereumChain',
-              params: [{ chainId: '0x13882' }], // 80002 in hex
-            });
+            await switchNetwork?.(80002);
+            // Wait a moment for the network switch to complete
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Get fresh provider after network switch
+            const updatedProvider = new ethers.providers.Web3Provider(window.ethereum);
+            onConnect(updatedProvider, address);
           } catch (error) {
-            console.error('Error switching to Polygon Amoy:', error);
+            console.error('Failed to switch network:', error);
           }
+        } else {
+          onConnect(provider, address);
         }
-        
-        // Get fresh provider after potential network switch
-        const updatedProvider = new ethers.providers.Web3Provider(window.ethereum);
-        onConnect(updatedProvider, address);
       }
     };
 
     handleConnection();
-  }, [isConnected, address, onConnect, connectedAccount]);
+  }, [isConnected, address, onConnect, connectedAccount, switchNetwork, chain?.id]);
 
   // Close dropdown when clicking outside
   useEffect(() => {

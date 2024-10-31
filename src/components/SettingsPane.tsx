@@ -2,6 +2,8 @@ import React from 'react';
 import TacoConditionBuilder from './TacoConditionBuilder';
 import TacoDomainSelector from './TacoDomainSelector';
 import Blockie from './Blockie';
+import { useAccount, WagmiConfig } from 'wagmi';
+import { wagmiConfig } from './WalletConnect'; // We'll export wagmiConfig from WalletConnect
 
 interface SettingsPaneProps {
   onClose: () => void;
@@ -16,7 +18,7 @@ interface SettingsPaneProps {
   connectedAccount: string | null;
 }
 
-const SettingsPane: React.FC<SettingsPaneProps> = ({
+const SettingsPaneContent: React.FC<SettingsPaneProps> = ({
   onClose,
   nickname,
   onNicknameChange,
@@ -28,6 +30,12 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({
   currentDomain,
   connectedAccount,
 }) => {
+  // Get the current account from wagmi
+  const { address } = useAccount();
+  
+  // Use either the wagmi address or the passed connectedAccount
+  const displayAddress = address || connectedAccount;
+
   const truncateAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
@@ -69,16 +77,16 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({
             </div>
             <div className="bg-gray-800 rounded-lg p-3 space-y-3">
               {/* Wallet Address */}
-              {connectedAccount && (
+              {displayAddress && (
                 <div className="flex items-center justify-between p-2 bg-gray-700 bg-opacity-50 rounded-lg">
                   <div className="flex items-center space-x-2">
-                    <Blockie address={connectedAccount} size={24} className="rounded-full" />
+                    <Blockie address={displayAddress} size={24} className="rounded-full" />
                     <span className="text-sm text-gray-300 font-mono">
-                      {truncateAddress(connectedAccount)}
+                      {truncateAddress(displayAddress)}
                     </span>
                   </div>
                   <button
-                    onClick={() => navigator.clipboard.writeText(connectedAccount)}
+                    onClick={() => navigator.clipboard.writeText(displayAddress)}
                     className="text-gray-400 hover:text-gray-300 transition-colors"
                     title="Copy address"
                   >
@@ -151,6 +159,14 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({
         </div>
       </div>
     </div>
+  );
+};
+
+const SettingsPane: React.FC<SettingsPaneProps> = (props) => {
+  return (
+    <WagmiConfig config={wagmiConfig}>
+      <SettingsPaneContent {...props} />
+    </WagmiConfig>
   );
 };
 

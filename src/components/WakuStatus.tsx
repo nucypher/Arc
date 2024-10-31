@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { domains } from '@nucypher/taco';
+import { useNetwork } from 'wagmi';
+import { WagmiConfig } from 'wagmi';
+import { wagmiConfig } from './WalletConnect';
 
 interface WakuStatusProps {
   contentTopic: string | { name: string };
@@ -13,7 +16,7 @@ interface WakuStatusProps {
   onSidebarToggle: () => void;
 }
 
-const WakuStatus: React.FC<WakuStatusProps> = ({ 
+const WakuStatusContent: React.FC<WakuStatusProps> = ({ 
   contentTopic, 
   nickname, 
   tacoCondition, 
@@ -30,6 +33,25 @@ const WakuStatus: React.FC<WakuStatusProps> = ({
     }
     return false;
   });
+
+  const { chain } = useNetwork();
+
+  const getNetworkName = (networkName: string): string => {
+    // First check if we have chain info from wagmi
+    if (chain) {
+      return chain.name;
+    }
+
+    // Fallback to the passed network name
+    switch (networkName.toLowerCase()) {
+      case 'homestead':
+        return 'Ethereum Mainnet';
+      case 'amoy':
+        return 'Polygon Amoy';
+      default:
+        return networkName;
+    }
+  };
 
   const getTopicDisplay = (topic: string | { name: string }) => {
     if (typeof topic === 'string') {
@@ -50,17 +72,6 @@ const WakuStatus: React.FC<WakuStatusProps> = ({
     if (isInitializing) return 'Initializing';
     if (peerCount > 0) return `${peerCount} peers`;
     return 'No peers';
-  };
-
-  const getNetworkName = (networkName: string): string => {
-    switch (networkName.toLowerCase()) {
-      case 'homestead':
-        return 'Ethereum Mainnet';
-      case 'amoy':
-        return 'Polygon Amoy';
-      default:
-        return networkName;
-    }
   };
 
   return (
@@ -214,6 +225,15 @@ const WakuStatus: React.FC<WakuStatusProps> = ({
         </div>
       </div>
     </div>
+  );
+};
+
+// Wrap the component with WagmiConfig
+const WakuStatus: React.FC<WakuStatusProps> = (props) => {
+  return (
+    <WagmiConfig config={wagmiConfig}>
+      <WakuStatusContent {...props} />
+    </WagmiConfig>
   );
 };
 
