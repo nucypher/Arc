@@ -683,8 +683,8 @@ const MapView: React.FC<MapViewProps> = ({
         </div>
       </div>
 
-      {/* Chat input overlay */}
-      <div className="absolute bottom-4 left-[280px] right-4 bg-gray-900 bg-opacity-75 backdrop-blur-sm rounded-lg border border-gray-800 p-4 z-[1000]">
+      {/* Chat input overlay - full width */}
+      <div className="absolute bottom-4 left-4 right-4 bg-gray-900 bg-opacity-75 backdrop-blur-sm rounded-lg border border-gray-800 p-4 z-[1000]">
         <form onSubmit={onSendMessage} className="flex space-x-2">
           <input
             type="text"
