@@ -685,8 +685,8 @@ const MapView: React.FC<MapViewProps> = ({
         </MapContainer>
       </div>
 
-      {/* Chat messages overlay */}
-      <div className="absolute top-32 right-4 bottom-24 w-96 overflow-hidden z-[1000]">
+      {/* Chat messages overlay - adjusted right margin */}
+      <div className="absolute top-32 right-8 bottom-24 w-96 overflow-hidden z-[1000]">
         <div className="h-full overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
           {chatMessages.map((message) => (
             <div className="backdrop-blur-sm bg-black bg-opacity-30 rounded-lg">

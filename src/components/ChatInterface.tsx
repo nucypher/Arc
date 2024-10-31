@@ -41,7 +41,7 @@ const ChatInterfaceInner: React.FC = () => {
   const [account, setAccount] = useState<string | null>(null);
   const [condition, setCondition] = useState<any>(() => {
     const now = Math.floor(Date.now() / 1000);
-    return new conditions.base.time.TimeCondition({
+    const defaultCondition = new conditions.base.time.TimeCondition({
       returnValueTest: {
         comparator: '>=',
         value: now,
@@ -49,6 +49,13 @@ const ChatInterfaceInner: React.FC = () => {
       method: "blocktime",
       chain: chainIdMapping['80002'], // Polygon Amoy
     });
+
+    // Set initial condition description
+    setTimeout(() => {
+      setConditionDescription(`Time: ${new Date(now * 1000).toLocaleString()}`);
+    }, 0);
+
+    return defaultCondition;
   });
   const [conditionDescription, setConditionDescription] = useState<string | null>(null);
   const [currentDomain, setCurrentDomain] = useState<domains>(domains.TESTNET);
@@ -318,6 +325,7 @@ const ChatInterfaceInner: React.FC = () => {
         description = `ERC1155: ${newCondition.contractAddress?.slice(0, 6) || 'Unknown'}...`;
       } else {
         console.log('Unrecognized condition type:', newCondition.constructor.name);
+        description = 'Unknown condition type';
       }
     }
     setConditionDescription(description);

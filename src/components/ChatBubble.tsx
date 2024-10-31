@@ -111,10 +111,10 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
 
   return (
     <div 
-      className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
+      className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'} w-full`}
     >
       <div 
-        className={`relative max-w-[85%] p-4 rounded-lg shadow-lg ${
+        className={`w-full p-4 rounded-lg shadow-lg ${
           isCurrentUser 
             ? 'text-gray-200'
             : 'text-gray-200'
@@ -139,7 +139,7 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
             </div>
           )}
         </div>
-        <div className="break-words">
+        <div className="break-words w-full">
           {isDecrypting ? (
             <div className="flex items-center space-x-2">
               <svg className="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
