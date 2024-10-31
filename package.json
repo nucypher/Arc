@@ -11,8 +11,7 @@
   "dependencies": {
     "@nucypher/taco": "^0.5.0",
     "@nucypher/taco-auth": "^0.2.0",
-    "@waku/react": "^0.0.7-35b3583",
-    "@waku/sdk": "^0.0.28",
+    "@waku/sdk": "^0.0.29",
     "ethers": "^5.7.2",
     "next": "14.2.15",
     "protobufjs": "^7.2.4",
@@ -27,7 +26,7 @@
     "eslint": "^8",
     "eslint-config-next": "14.2.15",
     "postcss": "^8",
-    "tailwindcss": "^3.4.1",
+    "tailwindcss": "^3.4.14",
     "typescript": "^5"
   }
 }

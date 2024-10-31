@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ethers } from 'ethers';
 import { initializeTaco, encryptMessage, decryptMessage } from '../lib/tacoSetup';
-import { createNode, LightNodeProvider, subscribeToMessages, sendWakuMessage, defaultContentTopic, getWakuNodeStatus } from '../lib/wakuSetup';
+import { createNode, subscribeToMessages, sendWakuMessage, defaultContentTopic, getWakuNodeStatus } from '../lib/wakuSetup';
 import { ThresholdMessageKit, domains, conditions } from '@nucypher/taco';
 import WalletConnect from './WalletConnect';
 import TacoConditionBuilder from './TacoConditionBuilder';
@@ -589,9 +589,7 @@ const ChatInterfaceInner: React.FC = () => {
 
 const ChatInterface: React.FC = () => {
   return (
-    <LightNodeProvider>
       <ChatInterfaceInner />
-    </LightNodeProvider>
   );
 };
 

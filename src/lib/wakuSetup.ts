@@ -1,5 +1,4 @@
 import { createLightNode, waitForRemotePeer, Protocols, createEncoder, createDecoder } from '@waku/sdk';
-import { LightNodeProvider } from '@waku/react';
 import protobuf from 'protobufjs';
 
 export const defaultContentTopic = '/taco-chat/1/messages/proto';
@@ -74,5 +73,3 @@ export const sendWakuMessage = async (topic: string, sender: string, messageKit:
     payload: serializedMessage,
   });
 };
-
-export { LightNodeProvider };
