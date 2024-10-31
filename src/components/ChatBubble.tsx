@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { conditions } from '@nucypher/taco';
+import Blockie from './Blockie';
 
 interface ChatBubbleProps {
   message: {
@@ -110,6 +111,10 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
     }
   };
 
+  const truncateAddress = (address: string) => {
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
+
   return (
     <div 
       className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'} w-full`}
@@ -122,7 +127,14 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
         } backdrop-blur-sm transition-all duration-300 relative`}
       >
         <div className="font-bold text-sm mb-2 text-blue-300 flex items-center justify-between">
-          <span>{isCurrentUser ? 'You' : (message.senderNickname || message.sender.slice(0, 6))}</span>
+          <div className="flex items-center space-x-2">
+            <Blockie 
+              address={message.sender} 
+              size={20} 
+              className="rounded-full"
+            />
+            <span>{isCurrentUser ? 'You' : truncateAddress(message.sender)}</span>
+          </div>
           {message.condition && (
             <div className="relative">
               <button
