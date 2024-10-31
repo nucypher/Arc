@@ -10,6 +10,7 @@ import TacoConditionBuilder from './TacoConditionBuilder';
 import TacoDomainSelector from './TacoDomainSelector';
 import WakuStatus from './WakuStatus';
 import TopicSidebar from './TopicSidebar';
+import ChatBubble from './ChatBubble';
 
 interface Message {
   id: number;
@@ -144,6 +145,11 @@ const ChatInterfaceInner: React.FC = () => {
       try {
         await subscribeToMessages(currentTopic.name, async (decodedMessage: any) => {
           console.log('Received message:', decodedMessage);
+          // Check if the message is from the current user
+          if (decodedMessage.sender === account) {
+            console.log('Ignoring message from self');
+            return; // Skip processing messages from self
+          }
           try {
             console.log('Attempting to decrypt message...');
             const messageKit = ThresholdMessageKit.fromBytes(decodedMessage.content);
@@ -155,11 +161,9 @@ const ChatInterfaceInner: React.FC = () => {
               id: Date.now(),
               sender: decodedMessage.sender,
               senderNickname: decodedMessage.nickname,
-              content: '[Encrypted]',
+              content: decryptedContent,
               timestamp: decodedMessage.timestamp,
-              encrypted: true,
-              messageKit: messageKit,
-              decrypted: decryptedContent,
+              encrypted: false, // Mark as decrypted for display purposes
             };
             setMessages(prevMessages => {
               const updatedMessages = [...prevMessages, newMessage];
@@ -174,7 +178,7 @@ const ChatInterfaceInner: React.FC = () => {
         console.error('Error setting up message subscription:', error);
       }
     }
-  }, [wakuNode, currentTopic, web3Provider, currentDomain]);
+  }, [wakuNode, currentTopic, web3Provider, currentDomain, account]);
 
   useEffect(() => {
     if (wakuNode && currentTopic) {
@@ -264,11 +268,10 @@ const ChatInterfaceInner: React.FC = () => {
           id: Date.now(),
           sender: account,
           senderNickname: nickname,
-          content: '[Encrypted]',
+          content: inputText.trim(), // Store the original input as content
           timestamp: Date.now(),
-          encrypted: true,
-          messageKit: messageKit,
-          decrypted: inputText.trim(),
+          encrypted: true, // Mark as encrypted
+          decrypted: inputText.trim(), // Also store the original input as decrypted content
         };
         setMessages(prevMessages => {
           const updatedMessages = [...prevMessages, newMessage];
@@ -482,38 +485,19 @@ const ChatInterfaceInner: React.FC = () => {
             <div className="flex-grow overflow-y-auto p-4">
               <div className="space-y-4">
                 {messages.map((message) => (
-                  <div 
-                    key={message.id} 
-                    className={`flex ${message.sender === account ? 'justify-start' : 'justify-end'}`}
-                  >
-                    <div 
-                      className={`max-w-[85%] p-4 rounded-lg shadow-md ${
-                        message.sender === account 
-                          ? 'bg-gray-800 text-white' 
-                          : 'bg-blue-600 text-white'
-                      }`}
-                    >
-                      <div className="font-bold text-sm mb-2">
-                        {message.sender === account ? 'You' : (message.senderNickname || message.sender.slice(0, 6))}
-                      </div>
-                      <div className="break-words">
-                        {message.encrypted ? (
-                          <>
-                            {message.decrypted ? (
-                              <span className="text-green-300">{message.decrypted}</span>
-                            ) : (
-                              <span className="text-yellow-300">[Unable to decrypt]</span>
-                            )}
-                          </>
-                        ) : (
-                          <span>{message.content}</span>
-                        )}
-                      </div>
-                      <div className="text-xs text-gray-400 mt-2">
-                        {new Date(message.timestamp).toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
+                  <ChatBubble
+                    key={message.id}
+                    message={{
+                      id: message.id,
+                      sender: message.sender,
+                      senderNickname: message.senderNickname,
+                      content: message.content,
+                      timestamp: message.timestamp,
+                      encrypted: message.encrypted,
+                      decrypted: message.decrypted
+                    }}
+                    isCurrentUser={message.sender === account}
+                  />
                 ))}
               </div>
             </div>
