@@ -762,6 +762,8 @@ const ChatInterfaceInner: React.FC = () => {
               <MapView 
                 messages={messages} 
                 onShareLocation={handleLiveLocation}
+                account={account || ''}
+                nickname={nickname}
               />
             )}
           </div>

@@ -22,6 +22,16 @@ const userIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
+// Create a custom icon for received location updates
+const receivedLocationIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
 // Component to handle map updates
 const MapUpdater: React.FC<{ center: [number, number] }> = ({ center }) => {
   const map = useMap();
@@ -39,6 +49,8 @@ interface MapViewProps {
     senderNickname: string;
   }>;
   onShareLocation?: (location: { lat: number; lng: number }) => void;
+  account: string;
+  nickname: string;
 }
 
 interface LocationUpdate {
@@ -51,7 +63,7 @@ interface LocationUpdate {
   isLive: boolean;
 }
 
-const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation }) => {
+const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, nickname }) => {
   const [isSharing, setIsSharing] = useState(false);
   const watchIdRef = useRef<number | null>(null);
   const [defaultCenter, setDefaultCenter] = useState<[number, number]>([0, 0]);
@@ -215,28 +227,34 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation }) => {
 
   // Subscribe to location updates
   useEffect(() => {
-    let subscription: any;
+    let unsubscribe: (() => Promise<void>) | undefined;
     
     const setupLocationSubscription = async () => {
       try {
-        subscription = await subscribeToLocationUpdates((update: LocationUpdate) => {
-          console.log('Received location update:', update);
+        console.log('[Location] Setting up subscription to location updates');
+        const subscription = await subscribeToLocationUpdates((update: LocationUpdate) => {
+          console.log('[Location] Received location update:', update);
           setLiveLocations(prev => {
             const next = new Map(prev);
             next.set(update.sender, update);
             return next;
           });
         });
+        unsubscribe = subscription;
+        console.log('[Location] Subscription setup complete');
       } catch (error) {
-        console.error('Failed to subscribe to location updates:', error);
+        console.error('[Location] Failed to subscribe to location updates:', error);
       }
     };
 
     setupLocationSubscription();
 
     return () => {
-      if (subscription) {
-        subscription.unsubscribe();
+      if (unsubscribe) {
+        console.log('[Location] Cleaning up location subscription');
+        unsubscribe().catch(error => {
+          console.error('[Location] Error unsubscribing from location updates:', error);
+        });
       }
     };
   }, []);
@@ -249,9 +267,94 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation }) => {
 
     if ("geolocation" in navigator) {
       console.log('Setting up live location sharing...');
+      
+      // First get a single position with high accuracy
+      try {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(
+            resolve,
+            reject,
+            {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 0
+            }
+          );
+        });
+
+        // If we got an initial position, start watching with more lenient settings
+        console.log('Got initial position, starting watch');
+        watchIdRef.current = navigator.geolocation.watchPosition(
+          async (position) => {
+            console.log('Live sharing position update:', {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+              accuracy: position.coords.accuracy,
+              timestamp: new Date(position.timestamp).toISOString()
+            });
+
+            try {
+              await sendLocationUpdate(
+                account,
+                nickname,
+                position.coords.latitude,
+                position.coords.longitude,
+                position.coords.accuracy,
+                true
+              );
+            } catch (error) {
+              console.error('Failed to send location update:', error);
+            }
+
+            if (onShareLocation) {
+              onShareLocation({
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+              });
+            }
+            setLocationError(null);
+          },
+          (error) => {
+            console.error('Error in live location sharing:', error, {
+              code: error.code,
+              message: error.message
+            });
+            const errorMessage = getGeolocationErrorMessage(error);
+            setLocationError(errorMessage);
+            
+            // Only stop and retry if it's a timeout error
+            if (error.code === error.TIMEOUT) {
+              console.log('Timeout error, retrying with more lenient settings...');
+              stopSharingLocation();
+              retryWithLongerTimeout();
+            }
+          },
+          {
+            enableHighAccuracy: false, // Less strict accuracy for continuous updates
+            timeout: 15000,           // 15 second timeout
+            maximumAge: 10000,        // Accept positions up to 10 seconds old
+            maximumAge: 10000
+          }
+        );
+        console.log('Live sharing watch started with ID:', watchIdRef.current);
+        setIsSharing(true);
+      } catch (initialError) {
+        console.error('Failed to get initial position:', initialError);
+        // Fall back to less accurate watching immediately
+        retryWithLongerTimeout();
+      }
+    } else {
+      console.error('Geolocation not supported');
+      setLocationError("Geolocation is not supported by your browser");
+    }
+  };
+
+  const retryWithLongerTimeout = () => {
+    if ("geolocation" in navigator) {
+      console.log('Retrying location watch with lenient settings');
       watchIdRef.current = navigator.geolocation.watchPosition(
         async (position) => {
-          console.log('Live sharing position update:', {
+          console.log('Position update from retry:', {
             lat: position.coords.latitude,
             lng: position.coords.longitude,
             accuracy: position.coords.accuracy,
@@ -268,7 +371,7 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation }) => {
               true
             );
           } catch (error) {
-            console.error('Failed to send location update:', error);
+            console.error('Failed to send location update during retry:', error);
           }
 
           if (onShareLocation) {
@@ -280,57 +383,15 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation }) => {
           setLocationError(null);
         },
         (error) => {
-          console.error('Error in live location sharing:', error, {
-            code: error.code,
-            message: error.message
-          });
-          const errorMessage = getGeolocationErrorMessage(error);
-          setLocationError(errorMessage);
-          if (error.code === error.TIMEOUT) {
-            console.log('Timeout error, stopping and retrying...');
-            stopSharingLocation();
-            retryWithLongerTimeout();
-          } else {
-            stopSharingLocation();
-          }
-        },
-        {
-          enableHighAccuracy: false,
-          timeout: 30000,
-          maximumAge: 10000
-        }
-      );
-      console.log('Live sharing watch started with ID:', watchIdRef.current);
-      setIsSharing(true);
-    } else {
-      console.error('Geolocation not supported');
-      setLocationError("Geolocation is not supported by your browser");
-    }
-  };
-
-  // Add this new function for retry with longer timeout
-  const retryWithLongerTimeout = () => {
-    if ("geolocation" in navigator) {
-      watchIdRef.current = navigator.geolocation.watchPosition(
-        (position) => {
-          if (onShareLocation) {
-            onShareLocation({
-              lat: position.coords.latitude,
-              lng: position.coords.longitude
-            });
-          }
-          setLocationError(null);
-        },
-        (error) => {
-          console.error('Error getting location after retry:', error);
+          console.error('Error in retry location watching:', error);
           const errorMessage = getGeolocationErrorMessage(error);
           setLocationError(errorMessage);
           stopSharingLocation();
         },
         {
-          enableHighAccuracy: false,
-          timeout: 60000, // 60 seconds timeout for retry
-          maximumAge: 30000 // Allow positions up to 30 seconds old for retry
+          enableHighAccuracy: false,    // Don't require high accuracy
+          timeout: 30000,               // 30 second timeout
+          maximumAge: 30000             // Accept positions up to 30 seconds old
         }
       );
       setIsSharing(true);
@@ -427,7 +488,11 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation }) => {
             )}
             {/* Other location markers */}
             {allMarkers.map((marker, index) => (
-              <Marker key={index} position={marker.position}>
+              <Marker 
+                key={index} 
+                position={marker.position}
+                icon={receivedLocationIcon}
+              >
                 <Popup>
                   <div>
                     <strong>{marker.sender}</strong>
