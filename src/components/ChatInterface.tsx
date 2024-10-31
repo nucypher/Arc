@@ -147,7 +147,21 @@ const ChatInterfaceInner: React.FC = () => {
           // Get the network information
           const network = await provider.getNetwork();
           setEthereumNetwork(network.name);
-          setIsCorrectNetwork(network.chainId === 80002); // Polygon Amoy chainId
+          const isAmoy = network.chainId === 80002;
+          setIsCorrectNetwork(isAmoy);
+
+          // If not on Amoy, prompt to switch
+          if (!isAmoy) {
+            console.log('Not on Polygon Amoy, prompting switch...');
+            const switched = await switchToPolygonAmoy();
+            if (switched) {
+              console.log('Successfully switched to Polygon Amoy');
+              setIsCorrectNetwork(true);
+              setEthereumNetwork('amoy');
+            } else {
+              console.warn('Failed to switch to Polygon Amoy');
+            }
+          }
 
           console.log('Web3 initialized, account:', address, 'network:', network.name);
 
