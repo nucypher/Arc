@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { sendLocationUpdate, subscribeToLocationUpdates } from '../lib/wakuSetup';
+import { sendLocationUpdate, subscribeToLocationUpdates } from '../lib/waku';
 import Blockie from './Blockie';
 import makeBlockie from 'ethereum-blockies-base64';
 import { FaMapMarkerAlt } from 'react-icons/fa';
@@ -212,6 +212,16 @@ const darkPopupStyle = `
   }
   .dark-theme-popup .leaflet-popup-close-button:hover {
     color: #999;
+  }
+`;
+
+// Add this CSS block near the top of the file, after imports
+const mapStyles = `
+  .leaflet-control-attribution {
+    display: none;
+  }
+  .leaflet-control-container .leaflet-bottom.leaflet-right {
+    display: none;
   }
 `;
 
@@ -438,7 +448,11 @@ const MapView: React.FC<MapViewProps> = ({
             position.coords.latitude,
             position.coords.longitude,
             position.coords.accuracy,
-            true
+            true,
+            web3Provider,
+            condition,
+            currentDomain,
+            ritualId
           );
 
           // If we got an initial position, start watching with more lenient settings
@@ -459,7 +473,11 @@ const MapView: React.FC<MapViewProps> = ({
                   position.coords.latitude,
                   position.coords.longitude,
                   position.coords.accuracy,
-                  true
+                  true,
+                  web3Provider,
+                  condition,
+                  currentDomain,
+                  ritualId
                 );
                 setUserPosition([position.coords.latitude, position.coords.longitude]);
                 setLocationError(null);
@@ -521,7 +539,11 @@ const MapView: React.FC<MapViewProps> = ({
               position.coords.latitude,
               position.coords.longitude,
               position.coords.accuracy,
-              true
+              true,
+              web3Provider,
+              condition,
+              currentDomain,
+              ritualId
             );
           } catch (error) {
             console.error('Failed to send location update during retry:', error);
@@ -622,6 +644,7 @@ const MapView: React.FC<MapViewProps> = ({
   return (
     <div className="flex-1 relative">
       <style>{darkPopupStyle}</style>
+      <style>{mapStyles}</style>
       
       {locationError && (
         <div className="absolute top-0 left-0 right-0 z-[1000] p-3 bg-red-900 bg-opacity-50 border border-red-700 text-red-200">

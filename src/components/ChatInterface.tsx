@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ethers } from 'ethers';
-import { initializeTaco, encryptMessage, decryptMessage } from '../lib/tacoSetup';
-import { createNode, subscribeToMessages, sendWakuMessage, defaultContentTopic, getWakuNodeStatus, subscribeToLocationUpdates } from '../lib/wakuSetup';
+import { initializeTaco, encryptMessage, decryptMessage } from '../lib/taco';
+import { createNode, subscribeToMessages, sendWakuMessage, defaultContentTopic, getWakuNodeStatus, subscribeToLocationUpdates } from '../lib/waku';
 import { ThresholdMessageKit, domains, conditions } from '@nucypher/taco';
 import WalletConnect from './WalletConnect';
 import TacoConditionBuilder from './TacoConditionBuilder';
@@ -26,6 +26,7 @@ interface Message {
   encryptedContent?: Uint8Array; // Add this line to store the original encrypted content
   decrypted?: string;
   condition?: string;
+  delivered?: boolean;
 }
 
 interface Topic {
@@ -201,23 +202,30 @@ const ChatInterfaceInner: React.FC = () => {
     if (wakuNode && currentTopic && !isSubscribed) {
       console.log(`Setting up subscriptions for topic: ${currentTopic.name}`);
       try {
-        // Subscribe to regular messages
         await subscribeToMessages(currentTopic.name, async (decodedMessage: any) => {
           setTimeout(async () => {
             console.log('Received message:', decodedMessage);
             console.log('Current account:', account);
-            console.log('Web3Provider status:', web3Provider ? 'Initialized' : 'Not initialized');
             
-            const messageKey = `${decodedMessage.sender}-${decodedMessage.timestamp}`;
-            if (sentMessages.has(messageKey)) {
-              console.log('Ignoring message from self (found in sentMessages)');
-              return;
+            // Check if this is a message we sent
+            const isSentMessage = decodedMessage.sender === account;
+            
+            if (isSentMessage) {
+              // Only update the delivery status of the existing message
+              console.log('Received delivery confirmation for own message:', decodedMessage.timestamp);
+              setMessages(prevMessages => 
+                prevMessages.map(msg => 
+                  msg.id === decodedMessage.timestamp
+                    ? { ...msg, delivered: true }
+                    : msg
+                )
+              );
+              return; // Exit early, don't process the message further
             }
 
+            // Process messages from others only
             if (!web3Provider) {
               console.error('Web3Provider is not initialized. Unable to decrypt message.');
-              // You might want to add the message to the list as encrypted
-              // and provide a way for the user to retry decryption later
               return;
             }
 
@@ -242,9 +250,10 @@ const ChatInterfaceInner: React.FC = () => {
                 content: decryptedContent,
                 timestamp: decodedMessage.timestamp,
                 encrypted: true,
-                encryptedContent: decodedMessage.content, // Store the original encrypted content
+                encryptedContent: decodedMessage.content,
                 decrypted: decryptedContent,
                 condition: decodedMessage.condition,
+                delivered: false,
               };
               setFilteredMessages(prevMessages => {
                 const updatedMessages = [...prevMessages, newMessage];
@@ -268,6 +277,7 @@ const ChatInterfaceInner: React.FC = () => {
                 encryptedContent: decodedMessage.content, // Store the original encrypted content
                 decrypted: undefined,
                 condition: decodedMessage.condition,
+                delivered: false,
               };
               setFilteredMessages(prevMessages => {
                 const updatedMessages = [...prevMessages, newMessage];
@@ -293,7 +303,7 @@ const ChatInterfaceInner: React.FC = () => {
         console.error('Error setting up subscriptions:', error);
       }
     }
-  }, [wakuNode, currentTopic, web3Provider, currentDomain, account, sentMessages, isSubscribed]);
+  }, [wakuNode, currentTopic, web3Provider, currentDomain, account, isSubscribed]);
 
   useEffect(() => {
     if (wakuNode && currentTopic && !isSubscribed) {
@@ -411,6 +421,7 @@ const ChatInterfaceInner: React.FC = () => {
           encrypted: true,
           decrypted: inputText.trim(),
           condition: conditionString,
+          delivered: false,
         };
         
         // Add the sent message to the displayed list
@@ -622,6 +633,7 @@ const ChatInterfaceInner: React.FC = () => {
           encrypted: true,
           decrypted: locationMessage,
           condition: conditionString,
+          delivered: false,
         };
         
         setFilteredMessages(prevMessages => {

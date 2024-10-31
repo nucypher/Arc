@@ -31,7 +31,6 @@ export const encryptMessage = async (
   domain: domains,
   ritualId: string
 ) => {
-  await initializeTaco();
 
   try {
     const signer = web3Provider.getSigner();
@@ -59,7 +58,6 @@ export const decryptMessage = async (
   web3Provider: ethers.providers.Web3Provider,
   domain: domains
 ) => {
-  await initializeTaco();
 
   try {
     if (!web3Provider) {

@@ -1,5 +1,7 @@
 import { createLightNode, waitForRemotePeer, Protocols, createEncoder, createDecoder } from '@waku/sdk';
 import protobuf from 'protobufjs';
+import { ThresholdMessageKit } from '@nucypher/taco';
+import { encryptMessage } from './taco';
 
 export const defaultContentTopic = '/taco-chat/1/messages/proto';
 export const locationContentTopic = '/taco-chat/1/messages/data';
@@ -19,10 +21,8 @@ export const LocationUpdate = new protobuf.Type('LocationUpdate')
   .add(new protobuf.Field('timestamp', 1, 'uint64'))
   .add(new protobuf.Field('sender', 2, 'string'))
   .add(new protobuf.Field('nickname', 3, 'string'))
-  .add(new protobuf.Field('latitude', 4, 'double'))
-  .add(new protobuf.Field('longitude', 5, 'double'))
-  .add(new protobuf.Field('accuracy', 6, 'float'))
-  .add(new protobuf.Field('isLive', 7, 'bool'));
+  .add(new protobuf.Field('content', 4, 'bytes'))
+  .add(new protobuf.Field('condition', 5, 'string'));
 
 export const createNode = async () => {
   console.log('Creating Waku node...');
@@ -87,40 +87,15 @@ export const sendWakuMessage = async (topic: string, sender: string, messageKit:
   });
 };
 
-export const subscribeToLocationUpdates = async (callback: (update: any) => void) => {
-  if (!wakuNode) {
-    console.error('Waku node not initialized for location updates');
-    throw new Error('Waku node not initialized');
-  }
-
-  console.log(`[Location] Attempting to subscribe to location updates on topic: ${locationContentTopic}`);
-  
-  try {
-    const subscription = await wakuNode.filter.subscribe([createDecoder(locationContentTopic)], (wakuMessage: any) => {
-      if (!wakuMessage.payload) {
-        console.log('[Location] Received empty payload, skipping');
-        return;
-      }
-      console.log('[Location] Received raw location update:', wakuMessage);
-      const decodedMessage = LocationUpdate.decode(wakuMessage.payload);
-      console.log('[Location] Decoded location update:', {
-        sender: decodedMessage.sender,
-        nickname: decodedMessage.nickname,
-        lat: decodedMessage.latitude,
-        lng: decodedMessage.longitude,
-        accuracy: decodedMessage.accuracy,
-        isLive: decodedMessage.isLive,
-        timestamp: new Date(decodedMessage.timestamp).toISOString()
-      });
-      callback(decodedMessage);
-    });
-    console.log(`[Location] Successfully subscribed to location updates topic: ${locationContentTopic}`);
-    return subscription;
-  } catch (error) {
-    console.error('[Location] Error setting up location subscription:', error);
-    throw error;
-  }
-};
+interface LocationUpdate {
+  sender: string;
+  nickname: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  isLive: boolean;
+  timestamp: number;
+}
 
 export const sendLocationUpdate = async (
   sender: string,
@@ -128,45 +103,104 @@ export const sendLocationUpdate = async (
   latitude: number,
   longitude: number,
   accuracy: number,
-  isLive: boolean
+  isLive: boolean,
+  web3Provider: any,
+  condition: any,
+  currentDomain: any,
+  ritualId: string
 ) => {
-  if (!wakuNode) {
-    console.error('[Location] Waku node not initialized for sending location');
-    throw new Error('Waku node not initialized');
-  }
+  if (!wakuNode) throw new Error('Waku node not initialized');
 
-  console.log('[Location] Creating location update:', {
-    sender,
-    nickname,
+  // Create location data object
+  const locationData = {
     latitude,
     longitude,
     accuracy,
     isLive,
-    timestamp: new Date().toISOString()
-  });
-
-  const locationUpdate = LocationUpdate.create({
-    timestamp: Date.now(),
-    sender,
-    nickname,
-    latitude,
-    longitude,
-    accuracy,
-    isLive
-  });
-
-  console.log('[Location] Encoding location update');
-  const serializedMessage = LocationUpdate.encode(locationUpdate).finish();
-  console.log('[Location] Location update encoded, payload size:', serializedMessage.length);
+    timestamp: Date.now()
+  };
 
   try {
-    console.log('[Location] Sending location update to Waku');
+    // Encrypt location data with Taco
+    console.log('[Location] Encrypting location data');
+    const messageKit = await encryptMessage(
+      JSON.stringify(locationData),
+      web3Provider,
+      condition,
+      currentDomain,
+      ritualId
+    );
+    const encryptedContent = messageKit.toBytes();
+
+    // Create location update message
+    const locationUpdate = LocationUpdate.create({
+      timestamp: Date.now(),
+      sender,
+      nickname,
+      content: encryptedContent,
+      condition: JSON.stringify(condition)
+    });
+
+    console.log('[Location] Encoding location update');
+    const serializedMessage = LocationUpdate.encode(locationUpdate).finish();
+    console.log('[Location] Location update encoded, payload size:', serializedMessage.length);
+
+    console.log('[Location] Sending encrypted location update to Waku');
     await wakuNode.lightPush.send(createEncoder({ contentTopic: locationContentTopic }), {
       payload: serializedMessage,
     });
-    console.log('[Location] Location update sent successfully');
+    console.log('[Location] Encrypted location update sent successfully');
   } catch (error) {
     console.error('[Location] Error sending location update:', error);
+    throw error;
+  }
+};
+
+export const subscribeToLocationUpdates = async (
+  callback: (update: LocationUpdate) => void,
+  web3Provider: any,
+  currentDomain: any
+) => {
+  if (!wakuNode) {
+    console.error('[Location] Waku node not initialized for location updates');
+    throw new Error('Waku node not initialized');
+  }
+
+  console.log(`[Location] Attempting to subscribe to location updates on topic: ${locationContentTopic}`);
+  
+  try {
+    const subscription = await wakuNode.filter.subscribe([createDecoder(locationContentTopic)], async (wakuMessage: any) => {
+      if (!wakuMessage.payload) {
+        console.log('[Location] Received empty payload, skipping');
+        return;
+      }
+
+      try {
+        console.log('[Location] Received raw location update');
+        const decodedMessage = LocationUpdate.decode(wakuMessage.payload);
+        
+        // Decrypt the location data
+        const messageKit = ThresholdMessageKit.fromBytes(decodedMessage.content);
+        const decrypted = await decryptMessage(messageKit, web3Provider, currentDomain);
+        const locationData = JSON.parse(new TextDecoder().decode(decrypted));
+
+        const update: LocationUpdate = {
+          sender: decodedMessage.sender,
+          nickname: decodedMessage.nickname,
+          ...locationData
+        };
+
+        console.log('[Location] Decrypted location update:', update);
+        callback(update);
+      } catch (error) {
+        console.error('[Location] Error processing location update:', error);
+      }
+    });
+
+    console.log(`[Location] Successfully subscribed to location updates topic: ${locationContentTopic}`);
+    return subscription;
+  } catch (error) {
+    console.error('[Location] Error setting up location subscription:', error);
     throw error;
   }
 };

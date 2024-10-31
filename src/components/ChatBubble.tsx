@@ -11,6 +11,7 @@ interface ChatBubbleProps {
     encrypted: boolean;
     decrypted?: string;
     condition?: string;
+    delivered?: boolean;
   };
   isCurrentUser: boolean;
   canDecrypt: boolean;
@@ -118,8 +119,26 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
           isCurrentUser 
             ? 'text-gray-200'
             : 'text-gray-200'
-        } backdrop-blur-sm transition-all duration-300`}
+        } backdrop-blur-sm transition-all duration-300 relative`}
       >
+        {isCurrentUser && message.delivered && (
+          <div className="absolute bottom-2 right-2 text-green-400" title="Message delivered">
+            <svg 
+              className="w-4 h-4" 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+          </div>
+        )}
+        
         <div className="font-bold text-sm mb-2 text-blue-300 flex items-center justify-between">
           <span>{isCurrentUser ? 'You' : (message.senderNickname || message.sender.slice(0, 6))}</span>
           {message.condition && (
