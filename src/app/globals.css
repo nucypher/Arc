@@ -25,3 +25,9 @@ body {
     text-wrap: balance;
   }
 }
+
+@supports (-webkit-touch-callout: none) {
+  .safe-bottom {
+    padding-bottom: calc(env(safe-area-inset-bottom) + 1rem);
+  }
+}

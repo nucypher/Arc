@@ -66,14 +66,14 @@ const WakuStatus: React.FC<WakuStatusProps> = ({
   return (
     <div className="w-full bg-gray-900 bg-opacity-50 border-b border-gray-800">
       {/* Mobile toggle button */}
-      <div className="lg:hidden w-full px-4 py-2 flex items-center justify-between text-gray-300 hover:bg-gray-800 transition-colors duration-200">
-        <div className="flex items-center space-x-4">
+      <div className="lg:hidden w-full px-2 sm:px-4 py-1.5 sm:py-2 flex items-center justify-between text-gray-300 hover:bg-gray-800 transition-colors duration-200">
+        <div className="flex items-center space-x-2 sm:space-x-4">
           <button
             onClick={onSidebarToggle}
-            className="p-2 -ml-2 hover:bg-gray-700 rounded-lg transition-colors duration-200"
+            className="p-1.5 sm:p-2 -ml-1 sm:-ml-2 hover:bg-gray-700 rounded-lg transition-colors duration-200"
           >
             <svg
-              className={`w-6 h-6 text-gray-300 transform transition-transform duration-200 ${
+              className={`w-5 h-5 sm:w-6 sm:h-6 text-gray-300 transform transition-transform duration-200 ${
                 isSidebarCollapsed ? 'rotate-180' : ''
               }`}
               fill="none"
@@ -89,8 +89,8 @@ const WakuStatus: React.FC<WakuStatusProps> = ({
             </svg>
           </button>
           <div className="flex items-center">
-            <span className={`w-3 h-3 rounded-full mr-2 ${getStatusColor()}`}></span>
-            <span>{getStatusText()}</span>
+            <span className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full mr-1.5 sm:mr-2 ${getStatusColor()}`}></span>
+            <span className="text-sm sm:text-base">{getStatusText()}</span>
           </div>
         </div>
         <button

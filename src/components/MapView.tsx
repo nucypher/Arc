@@ -630,6 +630,9 @@ const MapView: React.FC<MapViewProps> = ({
           style={{ height: '100%', width: '100%' }}
           zoomControl={false}
           className="dark-theme-map"
+          touchZoom={true}
+          tap={true}
+          dragging={true}
         >
           <MapUpdater center={defaultCenter} />
           <TileLayer
@@ -691,27 +694,33 @@ const MapView: React.FC<MapViewProps> = ({
         </MapContainer>
       </div>
 
-      <div className="absolute top-32 right-8 bottom-24 w-96 overflow-hidden z-[1000]">
+      {/* Chat overlay */}
+      <div className="absolute top-32 right-0 bottom-24 w-96 max-w-full overflow-hidden z-[1000] pointer-events-none lg:pointer-events-auto">
         <div className="h-full overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
-          {messages.map((message) => (
-            <div key={message.id} className="backdrop-blur-sm bg-black bg-opacity-30 rounded-lg">
-              <ChatBubble
-                message={message}
-                isCurrentUser={isCurrentUser(message.sender)}
-                canDecrypt={canDecryptMessage(message.condition)}
-                isDecrypting={decryptingMessages.has(message.id)}
-                onRetryDecryption={onRetryDecryption}
-              />
-            </div>
-          ))}
+          <div className="lg:hidden w-full h-1 bg-gray-800 bg-opacity-50 rounded-full pointer-events-auto mb-2 mx-auto" style={{ width: '50px' }}>
+          </div>
+          
+          <div className="pointer-events-auto bg-black bg-opacity-30 backdrop-blur-sm rounded-lg p-2">
+            {messages.map((message) => (
+              <div key={message.id} className="mb-2">
+                <ChatBubble
+                  message={message}
+                  isCurrentUser={isCurrentUser(message.sender)}
+                  canDecrypt={canDecryptMessage(message.condition)}
+                  isDecrypting={decryptingMessages.has(message.id)}
+                  onRetryDecryption={onRetryDecryption}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className="absolute bottom-4 left-4 right-4 bg-gray-900 bg-opacity-75 backdrop-blur-sm rounded-lg border border-gray-800 p-4 z-[1000]">
+      {/* Input box - adjusted for mobile */}
+      <div className="fixed lg:absolute bottom-0 left-0 right-0 bg-gray-900 bg-opacity-75 backdrop-blur-sm border-t border-gray-800 p-4 z-[1000] pointer-events-auto safe-bottom">
         <form 
           onSubmit={async (e) => {
             e.preventDefault();
-            console.log('Form submitted in MapView, input text:', inputText);
             if (inputText.trim()) {
               try {
                 await onSendMessage(e);
@@ -720,7 +729,7 @@ const MapView: React.FC<MapViewProps> = ({
               }
             }
           }} 
-          className="flex space-x-2"
+          className="flex space-x-2 max-w-screen-lg mx-auto"
         >
           <input
             type="text"
