@@ -6,6 +6,9 @@ import { encryptMessage } from './taco';
 export const defaultContentTopic = '/taco-chat/1/messages/proto';
 export const locationContentTopic = '/taco-chat/1/messages/data';
 
+export const messageEncoder = createEncoder({ contentTopic: defaultContentTopic, ephemeral: true });
+export const locationEncoder = createEncoder({ contentTopic: locationContentTopic, ephemeral: true });
+
 let wakuNode: any = null;
 
 // Define message structure
@@ -82,7 +85,7 @@ export const sendWakuMessage = async (topic: string, sender: string, messageKit:
 
   const serializedMessage = Message.encode(protoMessage).finish();
 
-  await wakuNode.lightPush.send(createEncoder({ contentTopic: topic }), {
+  await wakuNode.lightPush.send(messageEncoder, {
     payload: serializedMessage,
   });
 };
@@ -146,7 +149,7 @@ export const sendLocationUpdate = async (
     console.log('[Location] Location update encoded, payload size:', serializedMessage.length);
 
     console.log('[Location] Sending encrypted location update to Waku');
-    await wakuNode.lightPush.send(createEncoder({ contentTopic: locationContentTopic }), {
+    await wakuNode.lightPush.send(createEncoder(locationEncoder), {
       payload: serializedMessage,
     });
     console.log('[Location] Encrypted location update sent successfully');

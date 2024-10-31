@@ -610,7 +610,7 @@ const ChatInterfaceInner: React.FC = () => {
       return;
     }
 
-    const locationMessage = `📍 Location: https://www.google.com/maps?q=${location.lat},${location.lng}`;
+    const locationMessage = `📍 Location: ${location.lat}, ${location.lng}`;
     
     try {
       const messageKit = await encryptMessage(locationMessage, web3Provider, condition, currentDomain, ritualId);
@@ -797,6 +797,9 @@ const ChatInterfaceInner: React.FC = () => {
             handleConditionChange={handleConditionChange}
             handleDomainChange={handleDomainChange}
             currentDomain={currentDomain}
+            web3Provider={web3Provider}
+            condition={condition}
+            ritualId={ritualId}
           />
         </div>
       </div>

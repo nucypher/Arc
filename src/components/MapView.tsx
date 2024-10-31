@@ -77,6 +77,9 @@ interface MapViewProps {
   handleConditionChange: (condition: any) => void;
   handleDomainChange: (domain: any, ritualId: string) => void;
   currentDomain: any;
+  web3Provider: ethers.providers.Web3Provider;
+  condition: any;
+  ritualId: string;
 }
 
 interface LocationUpdate {
@@ -92,7 +95,8 @@ interface LocationUpdate {
 // Add this new interface for the LiveShareControl props
 interface LiveShareControlProps {
   isSharing: boolean;
-  isSettingUp: boolean; // Add this new prop
+  isSettingUp: boolean;
+  isReconnecting?: boolean;
   onStartSharing: () => void;
   onStopSharing: () => void;
 }
@@ -101,6 +105,7 @@ interface LiveShareControlProps {
 const LiveShareControl: React.FC<LiveShareControlProps> = ({ 
   isSharing, 
   isSettingUp,
+  isReconnecting = false,
   onStartSharing, 
   onStopSharing 
 }) => {
@@ -144,9 +149,15 @@ const LiveShareControl: React.FC<LiveShareControlProps> = ({
               </svg>
               <span className="text-red-400">Stop Sharing</span>
             </button>
-            <div className="flex items-center justify-center bg-gray-800 bg-opacity-90 text-green-400 px-2 py-1 rounded shadow-lg border border-gray-600">
-              <div className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></div>
-              Live
+            <div className={`flex items-center justify-center bg-gray-800 bg-opacity-90 ${
+              isReconnecting ? 'text-yellow-400' : 'text-green-400'
+            } px-2 py-1 rounded shadow-lg border ${
+              isReconnecting ? 'border-yellow-600' : 'border-gray-600'
+            }`}>
+              <div className={`w-2 h-2 ${
+                isReconnecting ? 'bg-yellow-400' : 'bg-green-400'
+              } rounded-full mr-2 animate-pulse`}></div>
+              {isReconnecting ? 'Reconnecting' : 'Live'}
             </div>
           </div>
         )}
@@ -250,6 +261,9 @@ const MapView: React.FC<MapViewProps> = ({
   handleConditionChange,
   handleDomainChange,
   currentDomain,
+  web3Provider,
+  condition,
+  ritualId,
 }) => {
   const [isSharing, setIsSharing] = useState(false);
   const watchIdRef = useRef<number | null>(null);
@@ -257,7 +271,8 @@ const MapView: React.FC<MapViewProps> = ({
   const [hasSetInitialPosition, setHasSetInitialPosition] = useState(false);
   const [userPosition, setUserPosition] = useState<[number, number] | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
-  const [isSettingUpSharing, setIsSettingUpSharing] = useState(false); // Add this new state
+  const [isSettingUpSharing, setIsSettingUpSharing] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   // Get user's initial position for map center
   useEffect(() => {
@@ -312,14 +327,20 @@ const MapView: React.FC<MapViewProps> = ({
           });
           setUserPosition([position.coords.latitude, position.coords.longitude]);
           setLocationError(null);
+          setIsReconnecting(false);
         },
         (error) => {
           console.error('Error watching position:', error, {
             code: error.code,
             message: error.message
           });
-          const errorMessage = getGeolocationErrorMessage(error);
-          setLocationError(errorMessage);
+          setLocationError(getGeolocationErrorMessage(error));
+          setIsReconnecting(true);
+          
+          if (error.code === error.TIMEOUT) {
+            console.log('Timeout error, retrying with more lenient settings...');
+            retryWithLongerTimeout();
+          }
         },
         {
           enableHighAccuracy: true,
@@ -355,14 +376,30 @@ const MapView: React.FC<MapViewProps> = ({
   const locationMarkers = messages
     .filter(msg => msg.content.startsWith('📍 Location:'))
     .map(msg => {
-      const url = msg.content.split(': ')[1];
-      const coords = url.split('?q=')[1].split(',').map(Number);
-      return {
-        position: coords as [number, number],
-        sender: msg.senderNickname,
-        timestamp: msg.timestamp
-      };
-    });
+      try {
+        // Extract coordinates directly from the message format "📍 Location: lat, lng"
+        const [lat, lng] = msg.content
+          .replace('📍 Location:', '')
+          .trim()
+          .split(',')
+          .map(coord => parseFloat(coord.trim()));
+
+        if (isNaN(lat) || isNaN(lng)) {
+          console.warn('Invalid coordinates in message:', msg.content);
+          return null;
+        }
+
+        return {
+          position: [lat, lng] as [number, number],
+          sender: msg.senderNickname,
+          timestamp: msg.timestamp
+        };
+      } catch (error) {
+        console.warn('Failed to parse location message:', msg.content, error);
+        return null;
+      }
+    })
+    .filter((marker): marker is NonNullable<typeof marker> => marker !== null);
 
   const requestLocationPermission = async (): Promise<boolean> => {
     console.log('Requesting location permission...');
@@ -525,7 +562,7 @@ const MapView: React.FC<MapViewProps> = ({
       console.log('Retrying location watch with lenient settings');
       watchIdRef.current = navigator.geolocation.watchPosition(
         async (position) => {
-          console.log('Position update from retry:', {
+          console.log('Position updated:', {
             lat: position.coords.latitude,
             lng: position.coords.longitude,
             accuracy: position.coords.accuracy,
@@ -646,13 +683,6 @@ const MapView: React.FC<MapViewProps> = ({
       <style>{darkPopupStyle}</style>
       <style>{mapStyles}</style>
       
-      {locationError && (
-        <div className="absolute top-0 left-0 right-0 z-[1000] p-3 bg-red-900 bg-opacity-50 border border-red-700 text-red-200">
-          {locationError}
-        </div>
-      )}
-
-      {/* Map - adjust width calculation to prevent overflow */}
       <div className="absolute inset-0 z-0">
         <MapContainer
           center={defaultCenter}
@@ -667,14 +697,13 @@ const MapView: React.FC<MapViewProps> = ({
             url={DARK_MAP_STYLE}
             className="dark-tiles"
           />
-          {/* Live sharing control */}
           <LiveShareControl
             isSharing={isSharing}
             isSettingUp={isSettingUpSharing}
+            isReconnecting={isReconnecting}
             onStartSharing={startSharingLocation}
             onStopSharing={stopSharingLocation}
           />
-          {/* User position marker */}
           {userPosition && (
             <Marker position={userPosition} icon={createBlockieMarker(account, true)}>
               <Popup className="dark-theme-popup">
@@ -686,7 +715,6 @@ const MapView: React.FC<MapViewProps> = ({
               </Popup>
             </Marker>
           )}
-          {/* Other location markers */}
           {allMarkers.map((marker, index) => (
             <Marker 
               key={index} 
@@ -711,7 +739,6 @@ const MapView: React.FC<MapViewProps> = ({
         </MapContainer>
       </div>
 
-      {/* Chat messages overlay */}
       <div className="absolute top-32 right-8 bottom-24 w-96 overflow-hidden z-[1000]">
         <div className="h-full overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
           {chatMessages.map((message) => (
@@ -728,7 +755,6 @@ const MapView: React.FC<MapViewProps> = ({
         </div>
       </div>
 
-      {/* Chat input overlay - full width */}
       <div className="absolute bottom-4 left-4 right-4 bg-gray-900 bg-opacity-75 backdrop-blur-sm rounded-lg border border-gray-800 p-4 z-[1000]">
         <form onSubmit={onSendMessage} className="flex space-x-2">
           <input
@@ -757,12 +783,10 @@ const MapView: React.FC<MapViewProps> = ({
         </form>
       </div>
 
-      {/* Settings Panel Overlay */}
       {isSettingsOpen && (
         <div className="absolute inset-0 bg-black bg-opacity-50 z-[2000] flex justify-end">
           <div className="w-96 bg-gray-900 h-full overflow-y-auto border-l border-gray-800">
             <div className="p-6">
-              {/* Close button */}
               <div className="flex justify-end mb-6">
                 <button
                   onClick={onCloseSettings}
@@ -774,9 +798,7 @@ const MapView: React.FC<MapViewProps> = ({
                 </button>
               </div>
 
-              {/* Settings Sections */}
               <div className="space-y-8">
-                {/* Identity Settings */}
                 <div className="space-y-4">
                   <div className="border-b border-gray-800 pb-2">
                     <h3 className="text-lg font-medium text-gray-200">Identity</h3>
@@ -825,14 +847,12 @@ const MapView: React.FC<MapViewProps> = ({
                   </div>
                 </div>
 
-                {/* Message Encryption Settings */}
                 <div className="space-y-6">
                   <div className="border-b border-gray-800 pb-2">
                     <h3 className="text-lg font-medium text-gray-200">Message Encryption</h3>
                     <p className="text-sm text-gray-400">Choose how your messages will be encrypted</p>
                   </div>
 
-                  {/* Condition Builder */}
                   <div className="bg-gray-800 bg-opacity-50 rounded-lg p-4">
                     <div className="space-y-4">
                       <TacoConditionBuilder onConditionChange={handleConditionChange} />
@@ -840,7 +860,6 @@ const MapView: React.FC<MapViewProps> = ({
                   </div>
                 </div>
 
-                {/* Network Settings */}
                 <div className="space-y-4">
                   <div className="border-b border-gray-800 pb-2">
                     <h3 className="text-lg font-medium text-gray-200">Network</h3>
@@ -861,7 +880,6 @@ const MapView: React.FC<MapViewProps> = ({
                 </div>
               </div>
 
-              {/* Footer */}
               <div className="mt-8 pt-4 border-t border-gray-800">
                 <p className="text-sm text-gray-400 text-center">
                   Settings are automatically saved
