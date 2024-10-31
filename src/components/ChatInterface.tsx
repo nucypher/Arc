@@ -11,6 +11,8 @@ import TacoDomainSelector from './TacoDomainSelector';
 import WakuStatus from './WakuStatus';
 import TopicSidebar from './TopicSidebar';
 import ChatBubble from './ChatBubble';
+import { FaExclamationCircle } from 'react-icons/fa'; // Change to circle icon
+import { switchToPolygonAmoy } from '../utils/ethereum';
 
 interface Message {
   id: number;
@@ -19,9 +21,9 @@ interface Message {
   content: string;
   timestamp: number;
   encrypted: boolean;
-  messageKit?: ThresholdMessageKit;
+  encryptedContent?: Uint8Array; // Add this line to store the original encrypted content
   decrypted?: string;
-  condition?: string; // Add this line
+  condition?: string;
 }
 
 interface Topic {
@@ -60,6 +62,9 @@ const ChatInterfaceInner: React.FC = () => {
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [sentMessages, setSentMessages] = useState<Map<string, number>>(new Map());
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [decryptingMessages, setDecryptingMessages] = useState<Set<number>>(new Set());
+  const [ethereumNetwork, setEthereumNetwork] = useState<string>('Unknown');
+  const [isCorrectNetwork, setIsCorrectNetwork] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -100,7 +105,7 @@ const ChatInterfaceInner: React.FC = () => {
 
   const UnlockIcon = () => (
     <svg className="inline-block w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 018 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
     </svg>
   );
 
@@ -108,23 +113,50 @@ const ChatInterfaceInner: React.FC = () => {
     const setupWeb3 = async () => {
       if (typeof window.ethereum !== 'undefined') {
         try {
-          // Request account access
           await window.ethereum.request({ method: 'eth_requestAccounts' });
           const provider = new ethers.providers.Web3Provider(window.ethereum);
           setWeb3Provider(provider);
           const signer = provider.getSigner();
           const address = await signer.getAddress();
           setAccount(address);
-          console.log('Web3 initialized, account:', address);
+
+          // Get the network information
+          const network = await provider.getNetwork();
+          setEthereumNetwork(network.name);
+          setIsCorrectNetwork(network.chainId === 80002); // Polygon Amoy chainId
+
+          console.log('Web3 initialized, account:', address, 'network:', network.name);
+
+          // Listen for network changes
+          window.ethereum.on('chainChanged', (chainId: string) => {
+            console.log('Network changed to:', chainId);
+            const newNetwork = ethers.providers.getNetwork(parseInt(chainId));
+            setEthereumNetwork(newNetwork.name);
+            setIsCorrectNetwork(parseInt(chainId) === 80002);
+          });
+
         } catch (error) {
           console.error('Failed to initialize Web3:', error);
+          setEthereumNetwork('Unknown');
+          setIsCorrectNetwork(false);
         }
       } else {
         console.log('Please install MetaMask!');
+        setEthereumNetwork('Not Connected');
+        setIsCorrectNetwork(false);
       }
     };
 
     setupWeb3();
+
+    // Cleanup function
+    return () => {
+      if (window.ethereum && window.ethereum.removeListener) {
+        window.ethereum.removeListener('chainChanged', () => {
+          console.log('Removed chainChanged event listener');
+        });
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -147,11 +179,10 @@ const ChatInterfaceInner: React.FC = () => {
       console.log(`Setting up message subscription for topic: ${currentTopic.name}`);
       try {
         await subscribeToMessages(currentTopic.name, async (decodedMessage: any) => {
-          // Implement a short delay before processing the message
           setTimeout(async () => {
             console.log('Received message:', decodedMessage);
             console.log('Current account:', account);
-            console.log('Sent messages:', Array.from(sentMessages.entries()));
+            console.log('Web3Provider status:', web3Provider ? 'Initialized' : 'Not initialized');
             
             const messageKey = `${decodedMessage.sender}-${decodedMessage.timestamp}`;
             if (sentMessages.has(messageKey)) {
@@ -159,12 +190,26 @@ const ChatInterfaceInner: React.FC = () => {
               return;
             }
 
+            if (!web3Provider) {
+              console.error('Web3Provider is not initialized. Unable to decrypt message.');
+              // You might want to add the message to the list as encrypted
+              // and provide a way for the user to retry decryption later
+              return;
+            }
+
             try {
               console.log('Attempting to decrypt message...');
+              setDecryptingMessages(prev => new Set(prev).add(decodedMessage.timestamp));
               const messageKit = ThresholdMessageKit.fromBytes(decodedMessage.content);
               const decrypted = await decryptMessage(messageKit, web3Provider, currentDomain);
               const decryptedContent = new TextDecoder().decode(decrypted);
               console.log('Message decrypted successfully:', decryptedContent);
+
+              setDecryptingMessages(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(decodedMessage.timestamp);
+                return newSet;
+              });
 
               const newMessage: Message = {
                 id: decodedMessage.timestamp,
@@ -173,15 +218,21 @@ const ChatInterfaceInner: React.FC = () => {
                 content: decryptedContent,
                 timestamp: decodedMessage.timestamp,
                 encrypted: true,
+                encryptedContent: decodedMessage.content, // Store the original encrypted content
                 decrypted: decryptedContent,
                 condition: decodedMessage.condition,
               };
-              setMessages(prevMessages => {
+              setFilteredMessages(prevMessages => {
                 const updatedMessages = [...prevMessages, newMessage];
                 return updatedMessages.sort((a, b) => a.timestamp - b.timestamp);
               });
             } catch (error) {
               console.error('Error processing received message:', error);
+              setDecryptingMessages(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(decodedMessage.timestamp);
+                return newSet;
+              });
               // Add a message bubble for undecryptable messages
               const newMessage: Message = {
                 id: decodedMessage.timestamp,
@@ -190,15 +241,16 @@ const ChatInterfaceInner: React.FC = () => {
                 content: '[Encrypted Message]',
                 timestamp: decodedMessage.timestamp,
                 encrypted: true,
+                encryptedContent: decodedMessage.content, // Store the original encrypted content
                 decrypted: undefined,
                 condition: decodedMessage.condition,
               };
-              setMessages(prevMessages => {
+              setFilteredMessages(prevMessages => {
                 const updatedMessages = [...prevMessages, newMessage];
                 return updatedMessages.sort((a, b) => a.timestamp - b.timestamp);
               });
             }
-          }, 500); // 500ms delay
+          }, 500);
         });
         console.log(`Successfully set up subscription for topic: ${currentTopic.name}`);
         setIsSubscribed(true);
@@ -273,9 +325,25 @@ const ChatInterfaceInner: React.FC = () => {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() || !account || !web3Provider || !condition || !isSubscribed) {
-      setError("Please ensure you're connected, have set a condition, and the subscription is set up before sending a message.");
+    if (!inputText.trim() || !account || !web3Provider || !isSubscribed) {
+      setError("Please ensure you're connected and the subscription is set up before sending a message.");
       return;
+    }
+
+    // Check if there's no condition set, and set the default condition if needed
+    if (!condition) {
+      const defaultCondition = generateDefaultCondition();
+      setCondition(defaultCondition);
+      setConditionDescription(`Time: ${new Date(defaultCondition.returnValueTest.value * 1000).toLocaleString()}`);
+    }
+
+    // Check if the user is on the Polygon Amoy network
+    if (!isCorrectNetwork) {
+      const switched = await switchToPolygonAmoy();
+      if (!switched) {
+        setError("Please switch to the Polygon Amoy network to send messages.");
+        return;
+      }
     }
 
     try {
@@ -308,7 +376,9 @@ const ChatInterfaceInner: React.FC = () => {
           decrypted: inputText.trim(),
           condition: conditionString,
         };
-        setMessages(prevMessages => {
+        
+        // Add the sent message to the displayed list
+        setFilteredMessages(prevMessages => {
           const updatedMessages = [...prevMessages, newMessage];
           return updatedMessages.sort((a, b) => a.timestamp - b.timestamp);
         });
@@ -328,11 +398,22 @@ const ChatInterfaceInner: React.FC = () => {
     setMessages([]);
   };
 
-  const handleTopicCreate = (newTopic: string) => {
-    if (!topics.some(topic => topic.name === newTopic)) {
-      setTopics(prevTopics => [...prevTopics, { name: newTopic, lastMessage: "Welcome to the new topic!", lastMessageTime: Date.now() }]);
-      setCurrentTopic({ name: newTopic });
-      // You might want to clear messages or perform other actions for the new topic
+  const handleTopicCreate = (newTopicName: string) => {
+    // Ensure the base structure is maintained
+    const baseTopicPath = '/taco-chat/1/messages/';
+    const fullNewTopic = `${baseTopicPath}${newTopicName}`;
+
+    if (!topics.some(topic => topic.name === fullNewTopic)) {
+      setTopics(prevTopics => [
+        ...prevTopics, 
+        { 
+          name: fullNewTopic, 
+          lastMessage: "Welcome to the new topic!", 
+          lastMessageTime: Date.now() 
+        }
+      ]);
+      setCurrentTopic({ name: fullNewTopic });
+      // Clear messages for the new topic
       setMessages([]);
     }
   };
@@ -387,6 +468,86 @@ const ChatInterfaceInner: React.FC = () => {
     setIsAboutOpen(!isAboutOpen);
   };
 
+  const canDecryptMessage = useCallback((messageCondition: string) => {
+    if (!condition || !messageCondition) return false;
+    
+    try {
+      const parsedMessageCondition = JSON.parse(messageCondition);
+      // Here you would implement the logic to check if the current user's condition
+      // meets the message's condition. This is a placeholder implementation.
+      return JSON.stringify(condition) === JSON.stringify(parsedMessageCondition);
+    } catch (error) {
+      console.error('Error parsing message condition:', error);
+      return false;
+    }
+  }, [condition]);
+
+  const getNetworkName = (networkName: string): string => {
+    switch (networkName.toLowerCase()) {
+      case 'homestead':
+        return 'Ethereum Mainnet';
+      case 'sepolia':
+        return 'Sepolia Testnet';
+      case 'goerli':
+        return 'Goerli Testnet';
+      default:
+        return networkName;
+    }
+  };
+
+  const generateDefaultCondition = () => {
+    const now = Math.floor(Date.now() / 1000);
+    return new conditions.base.time.TimeCondition({
+      chain: chainIdMapping['80002'], // Polygon Amoy
+      returnValueTest: {
+        comparator: '>=',
+        value: now,
+      },
+    });
+  };
+
+  // Modify the filterMessages function
+  const filterMessages = useCallback((messages: Message[]) => {
+    return messages.filter(message => 
+      message.sender === account || // Keep outgoing messages
+      (message.sender !== account && message.encrypted) // Keep encrypted messages from others
+    );
+  }, [account]);
+
+  // Modify the setMessages calls to use the filterMessages function
+  const setFilteredMessages = useCallback((newMessages: Message[] | ((prevMessages: Message[]) => Message[])) => {
+    setMessages(prevMessages => {
+      const updatedMessages = typeof newMessages === 'function' ? newMessages(prevMessages) : newMessages;
+      return filterMessages(updatedMessages);
+    });
+  }, [filterMessages]);
+
+  const handleRetryDecryption = async (messageId: number) => {
+    const messageToDecrypt = messages.find(msg => msg.id === messageId);
+    if (!messageToDecrypt || !web3Provider || !messageToDecrypt.encryptedContent) return;
+
+    setDecryptingMessages(prev => new Set(prev).add(messageId));
+
+    try {
+      const messageKit = ThresholdMessageKit.fromBytes(messageToDecrypt.encryptedContent);
+      const decrypted = await decryptMessage(messageKit, web3Provider, currentDomain);
+      const decryptedContent = new TextDecoder().decode(decrypted);
+
+      setMessages(prevMessages => prevMessages.map(msg => 
+        msg.id === messageId ? { ...msg, decrypted: decryptedContent, content: decryptedContent } : msg
+      ));
+    } catch (error) {
+      console.error('Error decrypting message:', error);
+      setError(`Failed to decrypt message: ${error.message}`);
+    } finally {
+      setDecryptingMessages(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(messageId);
+        return newSet;
+      });
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-black text-white relative overflow-hidden">
       {/* Subtle blue-black gradient background */}
@@ -435,6 +596,15 @@ const ChatInterfaceInner: React.FC = () => {
               <h1 className="text-2xl font-bold">Arc</h1>
             </div>
             <div className="flex items-center space-x-4">
+              {!isCorrectNetwork && (
+                <button 
+                  onClick={switchToPolygonAmoy}
+                  className="text-white hover:text-gray-300 transition-colors duration-200"
+                  title="Switch to Polygon Amoy"
+                >
+                  <FaExclamationCircle size={20} />
+                </button>
+              )}
               <WalletConnect onConnect={handleWalletConnect} connectedAccount={account} />
               <button
                 onClick={toggleAbout}
@@ -460,6 +630,8 @@ const ChatInterfaceInner: React.FC = () => {
             tacoCondition={conditionDescription}
             peerCount={peerCount}
             isInitializing={isInitializing}
+            tacoDomain={currentDomain}
+            ethereumNetwork={getNetworkName(ethereumNetwork)}
           />
         </div>
         
@@ -519,19 +691,14 @@ const ChatInterfaceInner: React.FC = () => {
             )}
             <div className="flex-grow overflow-y-auto p-4">
               <div className="space-y-4">
-                {messages.map((message) => (
+                {filterMessages(messages).map((message) => (
                   <ChatBubble
                     key={message.id}
-                    message={{
-                      id: message.id,
-                      sender: message.sender,
-                      senderNickname: message.senderNickname,
-                      content: message.content,
-                      timestamp: message.timestamp,
-                      encrypted: message.encrypted,
-                      decrypted: message.decrypted
-                    }}
+                    message={message}
                     isCurrentUser={message.sender === account}
+                    canDecrypt={canDecryptMessage(message.condition)}
+                    isDecrypting={decryptingMessages.has(message.id)}
+                    onRetryDecryption={handleRetryDecryption}
                   />
                 ))}
               </div>

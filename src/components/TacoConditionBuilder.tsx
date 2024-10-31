@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { conditions } from '@nucypher/taco';
 
 export const chainIdMapping: { [key: string]: number } = {
@@ -25,7 +25,27 @@ const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onCondition
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const validateAndBuildCondition = () => {
+  const timePresets = [
+    { label: 'now', value: 0 },
+    { label: '1m', value: 60 },
+    { label: '5m', value: 5 * 60 },
+    { label: '15m', value: 15 * 60 },
+    { label: '1h', value: 60 * 60 },
+    { label: '1d', value: 24 * 60 * 60 },
+  ];
+
+  useEffect(() => {
+    // Set the default timestamp to "Now" when the component mounts
+    handleTimePresetClick(0);
+  }, []);
+
+  const handleTimePresetClick = (seconds: number) => {
+    const newTimestamp = Math.floor(Date.now() / 1000) + seconds;
+    setTimestamp(newTimestamp.toString());
+    validateAndBuildCondition(newTimestamp.toString());
+  };
+
+  const validateAndBuildCondition = (timestampValue: string = timestamp) => {
     setError(null);
     setSuccess(null);
 
@@ -42,7 +62,7 @@ const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onCondition
             chain: mappedChainId,
             returnValueTest: {
               comparator: '>=',
-              value: parseInt(timestamp),
+              value: parseInt(timestampValue),
             },
           });
           break;
@@ -133,16 +153,31 @@ const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onCondition
         </div>
       </div>
       {conditionType === 'time' && (
-        <div className="relative mb-4">
-          <input
-            type="number"
-            value={timestamp}
-            onChange={(e) => setTimestamp(e.target.value)}
-            className="w-full p-2 bg-gray-800 border border-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-gray-600 text-white"
-            placeholder=" "
-          />
-          <label className="absolute text-xs text-gray-400 -top-2 left-2 bg-black px-1">Timestamp</label>
-        </div>
+        <>
+          <div className="relative mb-4">
+            <input
+              type="number"
+              value={timestamp}
+              onChange={(e) => setTimestamp(e.target.value)}
+              className="w-full p-2 bg-gray-800 border border-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-gray-600 text-white"
+              placeholder=" "
+            />
+            <label className="absolute text-xs text-gray-400 -top-2 left-2 bg-black px-1">Timestamp</label>
+          </div>
+          <div className="flex mb-4 overflow-x-auto">
+            <div className="flex space-x-2">
+              {timePresets.map((preset, index) => (
+                <button
+                  key={index}
+                  onClick={() => handleTimePresetClick(preset.value)}
+                  className="flex-shrink-0 w-12 h-12 bg-gray-700 text-white text-xs rounded-lg hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-600 flex items-center justify-center"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
       )}
       {(conditionType === 'ether' || conditionType === 'erc20' || conditionType === 'erc1155') && (
         <div className="relative mb-4">
@@ -181,7 +216,7 @@ const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onCondition
         </div>
       )}
       <button
-        onClick={validateAndBuildCondition}
+        onClick={() => validateAndBuildCondition()}
         className="w-full p-2 bg-white text-black rounded hover:bg-gray-200 transition-colors"
       >
         Generate Condition

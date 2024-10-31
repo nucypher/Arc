@@ -80,7 +80,7 @@ const TopicSidebar: React.FC<TopicSidebarProps> = ({ topics, currentTopic, onTop
               <div className="font-medium mb-1">{topic.name}</div>
               {topic.lastMessage && (
                 <div className="text-sm text-gray-500">
-                  {truncateMessage(topic.lastMessage, 40)} // Increased from 30 to 40
+                  {truncateMessage(topic.lastMessage, 40)}
                 </div>
               )}
               {topic.lastMessageTime && (
