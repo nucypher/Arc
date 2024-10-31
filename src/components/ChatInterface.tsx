@@ -15,7 +15,7 @@ import MapView, { LocationUpdate } from './MapView';
 import { chainIdMapping } from './TacoConditionBuilder';
 import AboutPopup from './AboutPopup';
 import SettingsPane from './SettingsPane';
-import { useSwitchNetwork, WagmiConfig } from 'wagmi';
+import { useSwitchNetwork, WagmiConfig, useNetwork } from 'wagmi';
 import { wagmiConfig } from './WalletConnect';
 
 interface ChatMessage {
@@ -105,6 +105,18 @@ const ChatInterfaceInner: React.FC = () => {
   const { switchNetwork } = useSwitchNetwork({
     chainId: 80002, // Polygon Amoy
   });
+
+  // Add useNetwork hook
+  const { chain } = useNetwork();
+
+  // Update isCorrectNetwork whenever chain changes
+  useEffect(() => {
+    if (chain) {
+      const isAmoy = chain.id === 80002;
+      setIsCorrectNetwork(isAmoy);
+      setEthereumNetwork(isAmoy ? 'amoy' : chain.name);
+    }
+  }, [chain]);
 
   useEffect(() => {
     const init = async () => {
@@ -874,7 +886,7 @@ const ChatInterfaceInner: React.FC = () => {
               <h1 className="text-2xl font-bold">Arc</h1>
             </div>
             <div className="flex items-center space-x-2">
-              {!isCorrectNetwork && (
+              {!isCorrectNetwork && chain?.id !== 80002 && (
                 <button 
                   onClick={handleNetworkSwitch}
                   className="h-8 w-8 flex items-center justify-center text-yellow-500 hover:text-yellow-400 transition-colors duration-200 bg-gray-800 rounded hover:bg-gray-700"
