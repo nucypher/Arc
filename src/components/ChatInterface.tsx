@@ -862,10 +862,10 @@ const ChatInterfaceInner: React.FC = () => {
               {!isCorrectNetwork && (
                 <button 
                   onClick={switchToPolygonAmoy}
-                  className="text-white hover:text-gray-300 transition-colors duration-200"
-                  title="Switch to Polygon Amoy"
+                  className="h-8 w-8 flex items-center justify-center text-yellow-500 hover:text-yellow-400 transition-colors duration-200 bg-gray-800 rounded hover:bg-gray-700"
+                  title="Click to switch to Polygon Amoy"
                 >
-                  <FaExclamationCircle size={20} />
+                  <FaExclamationCircle size={18} />
                 </button>
               )}
               <WalletConnect onConnect={handleWalletConnect} connectedAccount={account} />

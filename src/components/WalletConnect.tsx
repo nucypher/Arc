@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ethers } from 'ethers';
 import Blockie from './Blockie';
 import { Web3Modal, useWeb3Modal } from '@web3modal/react';
@@ -58,25 +58,87 @@ const WalletConnectButton: React.FC<WalletConnectProps> = ({ onConnect, connecte
   const { open } = useWeb3Modal();
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (isConnected && address && window.ethereum && !connectedAccount) {
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      onConnect(provider, address);
-    }
-  }, [isConnected, address, onConnect, connectedAccount]);
-
-  const handleConnect = async () => {
-    if (isConnected) {
-      await disconnect();
-      return;
-    }
+  const addPolygonAmoyNetwork = async () => {
+    if (!window.ethereum) return;
 
     try {
-      await open();
+      await window.ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: '0x13882', // 80002 in hex
+          chainName: 'Polygon Amoy',
+          nativeCurrency: {
+            name: 'MATIC',
+            symbol: 'MATIC',
+            decimals: 18
+          },
+          rpcUrls: ['https://rpc-amoy.polygon.technology'],
+          blockExplorerUrls: ['https://www.oklink.com/amoy']
+        }]
+      });
     } catch (error) {
-      console.error('Failed to connect:', error);
+      console.error('Error adding Polygon Amoy network:', error);
     }
+  };
+
+  useEffect(() => {
+    const handleConnection = async () => {
+      if (isConnected && address && window.ethereum && !connectedAccount) {
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const network = await provider.getNetwork();
+        
+        // If not on Polygon Amoy, try to add the network first
+        if (network.chainId !== 80002) {
+          await addPolygonAmoyNetwork();
+          try {
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: '0x13882' }], // 80002 in hex
+            });
+          } catch (error) {
+            console.error('Error switching to Polygon Amoy:', error);
+          }
+        }
+        
+        // Get fresh provider after potential network switch
+        const updatedProvider = new ethers.providers.Web3Provider(window.ethereum);
+        onConnect(updatedProvider, address);
+      }
+    };
+
+    handleConnection();
+  }, [isConnected, address, onConnect, connectedAccount]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleConnect = async () => {
+    if (!isConnected) {
+      try {
+        await open();
+      } catch (error) {
+        console.error('Failed to connect:', error);
+      }
+    } else {
+      setShowDropdown(!showDropdown);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    await disconnect();
+    setShowDropdown(false);
   };
 
   const truncateAddress = (address: string) => {
@@ -86,19 +148,55 @@ const WalletConnectButton: React.FC<WalletConnectProps> = ({ onConnect, connecte
   const displayAddress = address || connectedAccount;
 
   return (
-    <button
-      onClick={handleConnect}
-      className="h-8 px-3 bg-gray-800 text-white text-sm rounded hover:bg-gray-700 transition-colors duration-200 flex items-center justify-center space-x-1"
-    >
-      {displayAddress ? (
-        <>
-          <Blockie address={displayAddress} size={16} className="mr-1.5" />
-          <span className="truncate max-w-[80px] sm:max-w-[120px]">{truncateAddress(displayAddress)}</span>
-        </>
-      ) : (
-        <span>Connect Wallet</span>
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={handleConnect}
+        className="h-8 px-3 bg-gray-800 text-white text-sm rounded hover:bg-gray-700 transition-colors duration-200 flex items-center justify-center space-x-1"
+      >
+        {displayAddress ? (
+          <>
+            <Blockie address={displayAddress} size={16} className="mr-1.5" />
+            <span className="truncate max-w-[80px] sm:max-w-[120px]">{truncateAddress(displayAddress)}</span>
+            <svg 
+              className={`w-4 h-4 ml-1 transition-transform duration-200 ${showDropdown ? 'rotate-180' : ''}`} 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </>
+        ) : (
+          <span>Connect Wallet</span>
+        )}
+      </button>
+
+      {/* Dropdown Menu */}
+      {showDropdown && displayAddress && (
+        <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-lg shadow-xl z-50">
+          <div className="py-1">
+            <button
+              onClick={() => navigator.clipboard.writeText(displayAddress)}
+              className="w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 flex items-center"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+              </svg>
+              Copy Address
+            </button>
+            <button
+              onClick={handleDisconnect}
+              className="w-full px-4 py-2 text-sm text-red-400 hover:bg-gray-700 flex items-center"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              Disconnect
+            </button>
+          </div>
+        </div>
       )}
-    </button>
+    </div>
   );
 };
 
