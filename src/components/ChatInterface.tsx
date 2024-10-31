@@ -11,7 +11,7 @@ import TacoDomainSelector from './TacoDomainSelector';
 import WakuStatus from './WakuStatus';
 import TopicSidebar from './TopicSidebar';
 import ChatBubble from './ChatBubble';
-import { FaExclamationCircle } from 'react-icons/fa'; // Change to circle icon
+import { FaExclamationCircle, FaMapMarkerAlt } from 'react-icons/fa'; // Change to circle icon
 import { switchToPolygonAmoy } from '../utils/ethereum';
 
 interface Message {
@@ -548,6 +548,24 @@ const ChatInterfaceInner: React.FC = () => {
     }
   };
 
+  const handleShareLocation = async () => {
+    if ("geolocation" in navigator) {
+      try {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject);
+        });
+        
+        const locationMessage = `📍 Location: https://www.google.com/maps?q=${position.coords.latitude},${position.coords.longitude}`;
+        setInputText(locationMessage);
+      } catch (error) {
+        console.error('Error getting location:', error);
+        setError('Unable to get your location. Please make sure location services are enabled.');
+      }
+    } else {
+      setError('Geolocation is not supported by your browser.');
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-black text-white relative overflow-hidden">
       {/* Subtle blue-black gradient background */}
@@ -704,7 +722,7 @@ const ChatInterfaceInner: React.FC = () => {
               </div>
             </div>
             <div className="p-4 border-t border-gray-800">
-              <form onSubmit={handleSendMessage} className="flex">
+              <form onSubmit={handleSendMessage} className="flex space-x-2">
                 <input
                   type="text"
                   value={inputText}
@@ -712,6 +730,14 @@ const ChatInterfaceInner: React.FC = () => {
                   className="flex-grow px-4 py-2 bg-gray-800 text-white border border-gray-700 rounded-l focus:outline-none focus:ring-2 focus:ring-gray-600"
                   placeholder="Type your message..."
                 />
+                <button
+                  type="button"
+                  onClick={handleShareLocation}
+                  className="px-4 py-2 bg-gray-700 text-white hover:bg-gray-600 transition-colors duration-200 flex items-center justify-center"
+                  title="Share location"
+                >
+                  <FaMapMarkerAlt size={20} />
+                </button>
                 <button 
                   type="submit" 
                   className="px-4 py-2 bg-blue-600 text-white rounded-r hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center"
