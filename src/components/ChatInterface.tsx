@@ -321,18 +321,17 @@ const ChatInterfaceInner: React.FC = () => {
     setCondition(newCondition);
     // Create a shorthand description of the condition
     let description = 'Unknown condition';
+    console.log('New condition:', newCondition);
     if (newCondition) {
       if (newCondition instanceof conditions.base.time.TimeCondition) {
-        const value = newCondition.returnValueTest?.value;
+        const value = newCondition.value.returnValueTest?.value;
         description = value ? `Time: ${new Date(value * 1000).toLocaleString()}` : 'Time condition';
-      } else if (newCondition instanceof conditions.base.evm.EvmCondition) {
-        description = `EVM: ${newCondition.method || 'Unknown method'}`;
-      } else if (newCondition instanceof conditions.base.erc20.ERC20BalanceCondition) {
-        description = `ERC20: ${newCondition.contractAddress?.slice(0, 6) || 'Unknown'}...`;
-      } else if (newCondition instanceof conditions.base.erc721.ERC721OwnershipCondition) {
-        description = `ERC721: ${newCondition.contractAddress?.slice(0, 6) || 'Unknown'}...`;
-      } else if (newCondition instanceof conditions.base.erc1155.ERC1155BalanceCondition) {
-        description = `ERC1155: ${newCondition.contractAddress?.slice(0, 6) || 'Unknown'}...`;
+      } else if (newCondition instanceof conditions.predefined.erc20.ERC20Balance) {
+        description = `ERC20: ${newCondition.value.contractAddress?.slice(0, 6) || 'Unknown'}...`;
+      } else if (newCondition instanceof conditions.predefined.erc721.ERC721Ownership) {
+        description = `ERC721: ${newCondition.value.contractAddress?.slice(0, 6) || 'Unknown'}...`;
+      } else if (newCondition instanceof conditions.predefined.erc721.ERC721Balance) {
+        description = `ERC1155: ${newCondition.value.contractAddress?.slice(0, 6) || 'Unknown'}...`;
       } else {
         console.log('Unrecognized condition type:', newCondition.constructor.name);
         description = 'Unknown condition type';

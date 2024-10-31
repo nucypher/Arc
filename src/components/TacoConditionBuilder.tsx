@@ -54,7 +54,7 @@ const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onCondition
         });
         break;
       case 'erc20':
-        condition = new conditions.base.erc20.ERC20BalanceCondition({
+        condition = new conditions.predefined.erc20.ERC20Balance({
           contractAddress: value,
           chain: chainIdMapping[chain],
           returnValueTest: {
@@ -64,13 +64,9 @@ const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onCondition
         });
         break;
       case 'erc721':
-        condition = new conditions.base.erc721.ERC721OwnershipCondition({
+        condition = new conditions.predefined.erc721.ERC721Ownership({
           contractAddress: value,
           chain: chainIdMapping[chain],
-          returnValueTest: {
-            comparator: '==',
-            value: true,
-          },
           parameters: [tokenId],
         });
         break;
