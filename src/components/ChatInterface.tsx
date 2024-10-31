@@ -722,88 +722,31 @@ const ChatInterfaceInner: React.FC = () => {
             activeUsers={activeUsers}
             onMemberClick={handleMemberClick}
           />
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="bg-gray-800 px-4 border-b border-gray-700">
-              <div className="flex space-x-4">
-                <button
-                  onClick={() => setCurrentView('chat')}
-                  className={`py-2 px-4 focus:outline-none ${
-                    currentView === 'chat'
-                      ? 'text-blue-400 border-b-2 border-blue-400'
-                      : 'text-gray-400 hover:text-gray-300'
-                  }`}
-                >
-                  Chat
-                </button>
-                <button
-                  onClick={() => setCurrentView('map')}
-                  className={`py-2 px-4 focus:outline-none ${
-                    currentView === 'map'
-                      ? 'text-blue-400 border-b-2 border-blue-400'
-                      : 'text-gray-400 hover:text-gray-300'
-                  }`}
-                >
-                  Map
-                </button>
-              </div>
-            </div>
-
-            {currentView === 'chat' ? (
+          
+          <MapView 
+            messages={messages} 
+            onShareLocation={handleLiveLocation}
+            account={account || ''}
+            nickname={nickname}
+            liveLocations={liveLocations}
+            centerOnUser={centerOnUserId}
+            onSendMessage={handleSendMessage}
+            inputText={inputText}
+            onInputChange={(e) => setInputText(e.target.value)}
+            messages={messages}
+            isCurrentUser={(sender) => sender === account}
+            canDecryptMessage={canDecryptMessage}
+            decryptingMessages={decryptingMessages}
+            onRetryDecryption={handleRetryDecryption}
+            isSettingsOpen={isSettingsOpen}
+            onCloseSettings={() => setIsSettingsOpen(false)}
+            settingsContent={
               <>
-                <div className="flex-grow overflow-y-auto p-4">
-                  <div className="space-y-4">
-                    {filterMessages(messages).map((message) => (
-                      <ChatBubble
-                        key={message.id}
-                        message={message}
-                        isCurrentUser={message.sender === account}
-                        canDecrypt={canDecryptMessage(message.condition)}
-                        isDecrypting={decryptingMessages.has(message.id)}
-                        onRetryDecryption={handleRetryDecryption}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <div className="p-4 border-t border-gray-800">
-                  <form onSubmit={handleSendMessage} className="flex space-x-2">
-                    <input
-                      type="text"
-                      value={inputText}
-                      onChange={(e) => setInputText(e.target.value)}
-                      className="flex-grow px-4 py-2 bg-gray-800 text-white border border-gray-700 rounded-l focus:outline-none focus:ring-2 focus:ring-gray-600"
-                      placeholder="Type your message..."
-                    />
-                    <button
-                      type="button"
-                      onClick={handleLiveLocation}
-                      className="px-4 py-2 bg-gray-700 text-white hover:bg-gray-600 transition-colors duration-200 flex items-center justify-center"
-                      title="Share location"
-                    >
-                      <FaMapMarkerAlt size={20} />
-                    </button>
-                    <button 
-                      type="submit" 
-                      className="px-4 py-2 bg-blue-600 text-white rounded-r hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center"
-                      disabled={!condition || !web3Provider}
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
-                      </svg>
-                    </button>
-                  </form>
-                </div>
+                <TacoConditionBuilder onConditionChange={handleConditionChange} />
+                <TacoDomainSelector onDomainChange={handleDomainChange} />
               </>
-            ) : (
-              <MapView 
-                messages={messages} 
-                onShareLocation={handleLiveLocation}
-                account={account || ''}
-                nickname={nickname}
-                liveLocations={liveLocations}
-                centerOnUser={centerOnUserId}
-              />
-            )}
-          </div>
+            }
+          />
         </div>
       </div>
       

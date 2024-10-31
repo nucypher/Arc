@@ -5,6 +5,8 @@ import L from 'leaflet';
 import { sendLocationUpdate, subscribeToLocationUpdates } from '../lib/wakuSetup';
 import Blockie from './Blockie';
 import makeBlockie from 'ethereum-blockies-base64';
+import { FaMapMarkerAlt } from 'react-icons/fa';
+import ChatBubble from './ChatBubble';
 
 // Fix for default marker icons in react-leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -55,6 +57,17 @@ interface MapViewProps {
   nickname: string;
   liveLocations: Map<string, LocationUpdate>;
   centerOnUser?: string;
+  onSendMessage: (e: React.FormEvent) => void;
+  inputText: string;
+  onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  messages: Message[];
+  isCurrentUser: (sender: string) => boolean;
+  canDecryptMessage: (condition?: string) => boolean;
+  decryptingMessages: Set<number>;
+  onRetryDecryption: (messageId: number) => void;
+  isSettingsOpen: boolean;
+  onCloseSettings: () => void;
+  settingsContent: React.ReactNode;
 }
 
 interface LocationUpdate {
@@ -139,7 +152,21 @@ const DARK_MAP_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copy
 
 // Update the createBlockieMarker function
 const createBlockieMarker = (address: string, isUser: boolean = false) => {
-  const blockieUrl = makeBlockie(address);
+  let blockieUrl;
+  try {
+    // Check if address is valid
+    if (!address || address === 'Anonymous' || address.length < 10) {
+      // Use a default image or generate a random blockie
+      blockieUrl = makeBlockie('0x0000000000000000000000000000000000000000');
+    } else {
+      blockieUrl = makeBlockie(address);
+    }
+  } catch (error) {
+    console.error('Error creating blockie:', error);
+    // Fallback to default blockie
+    blockieUrl = makeBlockie('0x0000000000000000000000000000000000000000');
+  }
+  
   const color = isUser ? 'rgb(59, 130, 246)' : 'rgb(234, 179, 8)'; // blue-500 and yellow-500
   
   return new L.DivIcon({
@@ -179,7 +206,25 @@ const darkPopupStyle = `
   }
 `;
 
-const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, nickname, liveLocations, centerOnUser }) => {
+const MapView: React.FC<MapViewProps> = ({
+  messages,
+  onShareLocation,
+  account,
+  nickname,
+  liveLocations,
+  centerOnUser,
+  onSendMessage,
+  inputText,
+  onInputChange,
+  messages: chatMessages,
+  isCurrentUser,
+  canDecryptMessage,
+  decryptingMessages,
+  onRetryDecryption,
+  isSettingsOpen,
+  onCloseSettings,
+  settingsContent,
+}) => {
   const [isSharing, setIsSharing] = useState(false);
   const watchIdRef = useRef<number | null>(null);
   const [defaultCenter, setDefaultCenter] = useState<[number, number]>([0, 0]);
@@ -552,84 +597,140 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
   ];
 
   return (
-    <div className="flex-1 bg-gray-900">
+    <div className="flex-1 bg-gray-900 relative">
       <style>{darkPopupStyle}</style>
       
-      <div className="text-gray-300 h-full flex flex-col">
-        {locationError && (
-          <div className="p-3 bg-red-900 bg-opacity-50 border border-red-700 text-red-200">
-            {locationError}
-          </div>
-        )}
+      {locationError && (
+        <div className="absolute top-0 left-0 right-0 z-[1000] p-3 bg-red-900 bg-opacity-50 border border-red-700 text-red-200">
+          {locationError}
+        </div>
+      )}
 
-        {/* Map - now using dark theme */}
-        <div className="flex-1 relative">
-          <MapContainer
-            center={defaultCenter}
-            zoom={13}
-            style={{ height: '100%', width: '100%' }}
-            zoomControl={false} // Hide default zoom control
-            className="dark-theme-map" // Add custom class for additional styling
-          >
-            <MapUpdater center={defaultCenter} />
-            <TileLayer
-              attribution={DARK_MAP_ATTRIBUTION}
-              url={DARK_MAP_STYLE}
-              className="dark-tiles"
-            />
-            {/* Add zoom control in custom position */}
-            <div className="leaflet-control-container">
-              <div className="leaflet-top leaflet-left">
-                <div className="leaflet-control-zoom leaflet-bar leaflet-control">
-                  <a className="leaflet-control-zoom-in" href="#" title="Zoom in" role="button" aria-label="Zoom in">+</a>
-                  <a className="leaflet-control-zoom-out" href="#" title="Zoom out" role="button" aria-label="Zoom out">−</a>
+      {/* Map */}
+      <div className="absolute inset-0">
+        <MapContainer
+          center={defaultCenter}
+          zoom={13}
+          style={{ height: '100%', width: '100%' }}
+          zoomControl={false}
+          className="dark-theme-map"
+        >
+          <MapUpdater center={defaultCenter} />
+          <TileLayer
+            attribution={DARK_MAP_ATTRIBUTION}
+            url={DARK_MAP_STYLE}
+            className="dark-tiles"
+          />
+          {/* Live sharing control */}
+          <LiveShareControl
+            isSharing={isSharing}
+            isSettingUp={isSettingUpSharing}
+            onStartSharing={startSharingLocation}
+            onStopSharing={stopSharingLocation}
+          />
+          {/* User position marker */}
+          {userPosition && (
+            <Marker position={userPosition} icon={createBlockieMarker(account, true)}>
+              <Popup className="dark-theme-popup">
+                <div className="flex items-center">
+                  <Blockie address={account} size={24} className="mr-2" />
+                  <strong className="text-blue-400">Your Location</strong>
                 </div>
-              </div>
-            </div>
-            {/* Live sharing control */}
-            <LiveShareControl
-              isSharing={isSharing}
-              isSettingUp={isSettingUpSharing}
-              onStartSharing={startSharingLocation}
-              onStopSharing={stopSharingLocation}
+                <small className="text-gray-400 block mt-1">Last updated: {new Date().toLocaleString()}</small>
+              </Popup>
+            </Marker>
+          )}
+          {/* Other location markers */}
+          {allMarkers.map((marker, index) => (
+            <Marker 
+              key={index} 
+              position={marker.position}
+              icon={createBlockieMarker(marker.sender)}
+            >
+              <Popup className="dark-theme-popup">
+                <div className="flex items-center">
+                  <Blockie address={marker.sender} size={24} className="mr-2" />
+                  <strong className="text-yellow-400">{marker.sender}</strong>
+                </div>
+                <small className="text-gray-400 block mt-1">{new Date(marker.timestamp).toLocaleString()}</small>
+                {marker.isLive && (
+                  <div className="text-green-400 text-xs mt-1 flex items-center">
+                    <div className="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse"></div>
+                    Live
+                  </div>
+                )}
+              </Popup>
+            </Marker>
+          ))}
+        </MapContainer>
+      </div>
+
+      {/* Chat messages overlay - adjusted top margin to be even higher */}
+      <div className="absolute top-32 right-4 bottom-24 w-96 bg-gray-900 bg-opacity-75 rounded-lg backdrop-blur-sm border border-gray-800 overflow-hidden z-[1000]">
+        <div className="h-full overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+          {chatMessages.map((message) => (
+            <ChatBubble
+              key={message.id}
+              message={message}
+              isCurrentUser={isCurrentUser(message.sender)}
+              canDecrypt={canDecryptMessage(message.condition)}
+              isDecrypting={decryptingMessages.has(message.id)}
+              onRetryDecryption={onRetryDecryption}
             />
-            {/* User position marker */}
-            {userPosition && (
-              <Marker position={userPosition} icon={createBlockieMarker(account, true)}>
-                <Popup className="dark-theme-popup">
-                  <div className="flex items-center">
-                    <Blockie address={account} size={24} className="mr-2" />
-                    <strong className="text-blue-400">Your Location</strong>
-                  </div>
-                  <small className="text-gray-400 block mt-1">Last updated: {new Date().toLocaleString()}</small>
-                </Popup>
-              </Marker>
-            )}
-            {/* Other location markers */}
-            {allMarkers.map((marker, index) => (
-              <Marker 
-                key={index} 
-                position={marker.position}
-                icon={createBlockieMarker(marker.sender)}
-              >
-                <Popup className="dark-theme-popup">
-                  <div className="flex items-center">
-                    <Blockie address={marker.sender} size={24} className="mr-2" />
-                    <strong className="text-yellow-400">{marker.sender}</strong>
-                  </div>
-                  <small className="text-gray-400 block mt-1">{new Date(marker.timestamp).toLocaleString()}</small>
-                  {marker.isLive && (
-                    <div className="text-green-400 text-xs mt-1 flex items-center">
-                      <div className="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse"></div>
-                      Live
-                    </div>
-                  )}
-                </Popup>
-              </Marker>
-            ))}
-          </MapContainer>
+          ))}
         </div>
       </div>
+
+      {/* Chat input overlay */}
+      <div className="absolute bottom-4 left-4 right-4 bg-gray-900 bg-opacity-75 backdrop-blur-sm rounded-lg border border-gray-800 p-4 z-[1000]">
+        <form onSubmit={onSendMessage} className="flex space-x-2">
+          <input
+            type="text"
+            value={inputText}
+            onChange={onInputChange}
+            className="flex-grow px-4 py-2 bg-gray-800 text-white border border-gray-700 rounded-l focus:outline-none focus:ring-2 focus:ring-gray-600"
+            placeholder="Type your message..."
+          />
+          <button
+            type="button"
+            onClick={startSharingLocation}
+            className="px-4 py-2 bg-gray-700 text-white hover:bg-gray-600 transition-colors duration-200 flex items-center justify-center"
+            title="Share location"
+          >
+            <FaMapMarkerAlt size={20} />
+          </button>
+          <button 
+            type="submit" 
+            className="px-4 py-2 bg-blue-600 text-white rounded-r hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+            </svg>
+          </button>
+        </form>
+      </div>
+
+      {/* Settings Panel Overlay */}
+      {isSettingsOpen && (
+        <div className="absolute inset-0 bg-black bg-opacity-50 z-[2000] flex justify-end">
+          <div className="w-96 bg-gray-900 h-full overflow-y-auto border-l border-gray-800">
+            <div className="p-4">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold text-gray-200">Settings</h2>
+                <button
+                  onClick={onCloseSettings}
+                  className="text-gray-400 hover:text-gray-300"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              {settingsContent}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
