@@ -53,6 +53,7 @@ interface MapViewProps {
   account: string;
   nickname: string;
   liveLocations: Map<string, LocationUpdate>;
+  centerOnUser?: string;
 }
 
 interface LocationUpdate {
@@ -135,7 +136,7 @@ const LiveShareControl: React.FC<LiveShareControlProps> = ({
 const DARK_MAP_STYLE = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const DARK_MAP_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
-const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, nickname, liveLocations }) => {
+const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, nickname, liveLocations, centerOnUser }) => {
   const [isSharing, setIsSharing] = useState(false);
   const watchIdRef = useRef<number | null>(null);
   const [defaultCenter, setDefaultCenter] = useState<[number, number]>([0, 0]);
@@ -456,6 +457,14 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
       setIsSharing(false);
     }
   };
+
+  // Add effect to handle centering on user
+  useEffect(() => {
+    if (centerOnUser && liveLocations.has(centerOnUser)) {
+      const userLocation = liveLocations.get(centerOnUser)!;
+      setDefaultCenter([userLocation.latitude, userLocation.longitude]);
+    }
+  }, [centerOnUser, liveLocations]);
 
   if (!hasSetInitialPosition) {
     return (

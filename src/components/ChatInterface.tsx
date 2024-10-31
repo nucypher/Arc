@@ -69,6 +69,7 @@ const ChatInterfaceInner: React.FC = () => {
   const [currentView, setCurrentView] = useState<'chat' | 'map'>('chat');
   const [liveLocations, setLiveLocations] = useState<Map<string, LocationUpdate>>(new Map());
   const [activeUsers, setActiveUsers] = useState<Map<string, { nickname: string; lastSeen: number }>>(new Map());
+  const [centerOnUserId, setCenterOnUserId] = useState<string | undefined>();
 
   useEffect(() => {
     const init = async () => {
@@ -619,6 +620,11 @@ const ChatInterfaceInner: React.FC = () => {
     ));
   }, [liveLocations]);
 
+  const handleMemberClick = (userId: string) => {
+    setCenterOnUserId(userId);
+    setCurrentView('map'); // Switch to map view when clicking a member
+  };
+
   return (
     <div className="flex flex-col h-screen bg-black text-white relative overflow-hidden">
       {/* Subtle blue-black gradient background */}
@@ -714,6 +720,7 @@ const ChatInterfaceInner: React.FC = () => {
             onTopicCreate={handleTopicCreate}
             backgroundStyle={backgroundStyle}
             activeUsers={activeUsers}
+            onMemberClick={handleMemberClick}
           />
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="bg-gray-800 px-4 border-b border-gray-700">
@@ -793,6 +800,7 @@ const ChatInterfaceInner: React.FC = () => {
                 account={account || ''}
                 nickname={nickname}
                 liveLocations={liveLocations}
+                centerOnUser={centerOnUserId}
               />
             )}
           </div>

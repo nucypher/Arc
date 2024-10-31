@@ -12,6 +12,7 @@ interface TopicSidebarProps {
   onTopicCreate: (name: string) => void;
   backgroundStyle: React.CSSProperties;
   activeUsers?: Map<string, { nickname: string; lastSeen: number; address: string }>;
+  onMemberClick?: (userId: string) => void;
 }
 
 const TopicSidebar: React.FC<TopicSidebarProps> = ({
@@ -20,7 +21,8 @@ const TopicSidebar: React.FC<TopicSidebarProps> = ({
   onTopicSelect,
   onTopicCreate,
   backgroundStyle,
-  activeUsers = new Map()
+  activeUsers = new Map(),
+  onMemberClick
 }) => {
   const [newTopicName, setNewTopicName] = useState('');
   const [isCreatingTopic, setIsCreatingTopic] = useState(false);
@@ -46,11 +48,11 @@ const TopicSidebar: React.FC<TopicSidebarProps> = ({
     <div className="w-64 bg-gray-900 border-r border-gray-800 overflow-y-auto">
       <div className="p-4">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold text-gray-200">Topics</h2>
+          <h2 className="text-lg font-semibold text-gray-200">Channels</h2>
           <button
             onClick={() => setIsCreatingTopic(true)}
             className="text-blue-400 hover:text-blue-300 transition-colors duration-200"
-            title="Create new topic"
+            title="Create new channel"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -64,7 +66,7 @@ const TopicSidebar: React.FC<TopicSidebarProps> = ({
               type="text"
               value={newTopicName}
               onChange={(e) => setNewTopicName(e.target.value)}
-              placeholder="New topic name"
+              placeholder="New channel name"
               className="w-full px-3 py-2 bg-gray-800 text-gray-200 rounded border border-gray-700 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder-gray-500"
             />
           </form>
@@ -97,8 +99,9 @@ const TopicSidebar: React.FC<TopicSidebarProps> = ({
                     {Array.from(activeUsers.entries()).map(([userId, user]) => (
                       <div 
                         key={userId} 
-                        className="px-3 py-1 flex items-center text-sm text-gray-400 hover:bg-gray-700 transition-colors duration-150"
-                        title={userId} // Show full address on hover
+                        className="px-3 py-1 flex items-center text-sm text-gray-400 hover:bg-gray-700 transition-colors duration-150 cursor-pointer"
+                        title={`Click to center map on ${user.nickname === 'Anonymous' ? truncateAddress(userId) : user.nickname}`}
+                        onClick={() => onMemberClick?.(userId)}
                       >
                         <Blockie address={userId} size={20} className="mr-2" />
                         <span className="truncate flex-1">
