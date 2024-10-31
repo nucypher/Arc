@@ -3,6 +3,7 @@
 > **⚠️ WARNING**  
 > Arc is currently alpha software and may contain bugs or unexpected behavior. Use at your own risk and exercise caution when sharing sensitive location data.
 
+
 **Arc** is an experimental, privacy-preserving, permissionless, decentralized location-sharing application. Arc enables secure, end-to-end encrypted location sharing with fine-grained, on-chain access control, making it a powerful tool for individuals or groups needing private, censorship-resistant communication and location sharing.
 
 ## Features

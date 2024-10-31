@@ -13,6 +13,7 @@ interface TopicSidebarProps {
   backgroundStyle: React.CSSProperties;
   activeUsers?: Map<string, { nickname: string; lastSeen: number; address: string }>;
   onMemberClick?: (userId: string) => void;
+  isCollapsed: boolean;
 }
 
 const TopicSidebar: React.FC<TopicSidebarProps> = ({
@@ -21,7 +22,8 @@ const TopicSidebar: React.FC<TopicSidebarProps> = ({
   onTopicSelect,
   onTopicCreate,
   activeUsers = new Map(),
-  onMemberClick
+  onMemberClick,
+  isCollapsed
 }) => {
   const [newTopicName, setNewTopicName] = useState('');
   const [isCreatingTopic, setIsCreatingTopic] = useState(false);
@@ -46,7 +48,12 @@ const TopicSidebar: React.FC<TopicSidebarProps> = ({
   };
 
   return (
-    <div className="w-64 bg-gray-900 bg-opacity-75 backdrop-blur-sm border-r border-gray-800 overflow-y-auto z-[900] relative">
+    <div
+      className={`fixed lg:relative w-64 h-full bg-gray-900 bg-opacity-75 backdrop-blur-sm border-r border-gray-800 overflow-y-auto z-[900] transition-transform duration-300 ease-in-out ${
+        isCollapsed ? '-translate-x-full' : 'translate-x-0'
+      } lg:translate-x-0`}
+    >
+      {/* Sidebar content */}
       <div className="p-4">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-gray-200">Channels</h2>
@@ -77,7 +84,13 @@ const TopicSidebar: React.FC<TopicSidebarProps> = ({
           {topics.map((topic) => (
             <div key={topic.name} className="space-y-1">
               <button
-                onClick={() => onTopicSelect(topic)}
+                onClick={() => {
+                  onTopicSelect(topic);
+                  // Auto-collapse on mobile after selection
+                  if (window.innerWidth < 1024) {
+                    setIsCollapsed(true);
+                  }
+                }}
                 className={`w-full text-left px-3 py-2 rounded transition-colors duration-150 ${
                   currentTopic === topic.name
                     ? 'bg-blue-600 bg-opacity-50 text-white border border-blue-500'
@@ -102,7 +115,13 @@ const TopicSidebar: React.FC<TopicSidebarProps> = ({
                         key={userId} 
                         className="px-3 py-1 flex items-center text-sm text-gray-400 hover:bg-gray-700 hover:bg-opacity-50 transition-colors duration-150 cursor-pointer"
                         title={`Click to center map on ${user.nickname === 'Anonymous' ? truncateAddress(userId) : user.nickname}`}
-                        onClick={() => onMemberClick?.(userId)}
+                        onClick={() => {
+                          onMemberClick?.(userId);
+                          // Auto-collapse on mobile after member click
+                          if (window.innerWidth < 1024) {
+                            setIsCollapsed(true);
+                          }
+                        }}
                       >
                         <Blockie address={userId} size={20} className="mr-2" />
                         <span className="truncate flex-1">

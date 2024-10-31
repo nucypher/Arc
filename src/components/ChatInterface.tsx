@@ -77,6 +77,13 @@ const ChatInterfaceInner: React.FC = () => {
   const [activeUsers, setActiveUsers] = useState<Map<string, { nickname: string; lastSeen: number; address: string }>>(new Map());
   const [centerOnUserId, setCenterOnUserId] = useState<string | undefined>();
   const [error, setError] = useState<string | null>(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    // Check if we're in a browser environment and if it's a mobile device
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 1024;
+    }
+    return false;
+  });
 
   // Add a ref to track subscription cleanup
   const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
@@ -799,6 +806,19 @@ const ChatInterfaceInner: React.FC = () => {
     };
   }, []);
 
+  const handleSidebarToggle = () => {
+    setIsSidebarCollapsed(!isSidebarCollapsed);
+  };
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsSidebarCollapsed(window.innerWidth < 1024);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   return (
     <div className="flex flex-col h-screen bg-black text-white relative overflow-hidden">
       {/* Subtle blue-black gradient background */}
@@ -883,6 +903,8 @@ const ChatInterfaceInner: React.FC = () => {
             isInitializing={isInitializing}
             tacoDomain={currentDomain}
             ethereumNetwork={getNetworkName(ethereumNetwork)}
+            isSidebarCollapsed={isSidebarCollapsed}
+            onSidebarToggle={handleSidebarToggle}
           />
         </div>
         
@@ -895,6 +917,7 @@ const ChatInterfaceInner: React.FC = () => {
             backgroundStyle={backgroundStyle}
             activeUsers={activeUsers}
             onMemberClick={handleMemberClick}
+            isCollapsed={isSidebarCollapsed}
           />
           <MapView 
             messages={messages} 
