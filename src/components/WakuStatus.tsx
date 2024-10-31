@@ -7,7 +7,7 @@ interface WakuStatusProps {
   tacoCondition: string | null;
   peerCount: number;
   isInitializing: boolean;
-  tacoDomain: domains;
+  tacoDomain: typeof domains;
   ethereumNetwork: string;
 }
 

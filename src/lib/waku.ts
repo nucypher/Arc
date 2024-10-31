@@ -1,10 +1,11 @@
-import { createLightNode, waitForRemotePeer, Protocols, createEncoder, createDecoder } from '@waku/sdk';
+import { createLightNode, Protocols, createEncoder, createDecoder } from '@waku/sdk';
 import protobuf from 'protobufjs';
 import { ThresholdMessageKit } from '@nucypher/taco';
 import { encryptMessage, decryptMessage } from './taco';
 
-export const defaultContentTopic = '/taco-chat/1/messages/proto';
-export const locationContentTopic = '/taco-chat/1/messages/data';
+export const domainUUID = '876c3672-d8ca-4778-88e7-954f35cb2bbd';
+export const defaultContentTopic = `/taco-${domainUUID}/1/messages/proto`;
+export const locationContentTopic = `/taco-${domainUUID}/1/messages/data`;
 
 export const messageEncoder = createEncoder({ contentTopic: defaultContentTopic, ephemeral: true });
 export const locationEncoder = createEncoder({ contentTopic: locationContentTopic, ephemeral: true });
@@ -33,7 +34,7 @@ export const createNode = async () => {
   console.log('Waku node created, starting...');
   await wakuNode.start();
   console.log('Waku node started, waiting for remote peer...');
-  await waitForRemotePeer(wakuNode, [Protocols.LightPush, Protocols.Filter]);
+  await wakuNode.waitForPeers(wakuNode, [Protocols.LightPush, Protocols.Filter]);
   console.log('Waku node fully initialized and connected to remote peer');
   return wakuNode;
 };
@@ -55,7 +56,7 @@ export const subscribeToMessages = async (topic: string, callback: (message: any
     throw new Error('Waku node not initialized');
   }
 
-  console.log(`Attempting to subscribe to messages on topic: ${topic}`);
+  console.log(`Subscribing to topic: ${topic}`);
   
   try {
     const subscription = await wakuNode.filter.subscribe([createDecoder(topic)], (wakuMessage: any) => {

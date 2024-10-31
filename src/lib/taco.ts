@@ -28,7 +28,7 @@ export const encryptMessage = async (
   message: string,
   web3Provider: ethers.providers.Web3Provider,
   condition: any,
-  domain: domains,
+  domain: typeof domains,
   ritualId: string
 ) => {
 
@@ -41,7 +41,7 @@ export const encryptMessage = async (
       domain,
       message,
       condition,
-      ritualId,
+      parseInt(ritualId),
       signer
     );
 
@@ -56,7 +56,7 @@ export const encryptMessage = async (
 export const decryptMessage = async (
   messageKit: ThresholdMessageKit, 
   web3Provider: ethers.providers.Web3Provider,
-  domain: domains
+  domain: typeof domains
 ) => {
 
   try {

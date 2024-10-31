@@ -379,7 +379,7 @@ const ChatInterfaceInner: React.FC = () => {
     if (!condition) {
       const defaultCondition = generateDefaultCondition();
       setCondition(defaultCondition);
-      setConditionDescription(`Time: ${new Date(defaultCondition.returnValueTest.value * 1000).toLocaleString()}`);
+      setConditionDescription(`Time: ${new Date(defaultCondition.value.returnValueTest.value * 1000).toLocaleString()}`);
     }
 
     // Check if the user is on the Polygon Amoy network
