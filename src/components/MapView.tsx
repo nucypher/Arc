@@ -97,17 +97,65 @@ interface LiveShareControlProps {
   isSharing: boolean;
   isSettingUp: boolean;
   isReconnecting?: boolean;
+  userPosition: [number, number] | null;
   onStartSharing: () => void;
   onStopSharing: () => void;
+  onRecenter: () => void;
 }
 
-// Add this new control component for the live sharing button
-const LiveShareControl: React.FC<LiveShareControlProps> = ({ 
+// Add a separate component for the recenter button
+const RecenterControl: React.FC<{ userPosition: [number, number] | null; onRecenter: () => void }> = ({ 
+  userPosition, 
+  onRecenter 
+}) => {
+  if (!userPosition) return null;
+
+  return (
+    <div className="leaflet-top leaflet-left" style={{ zIndex: 1000 }}>
+      <div className="leaflet-control leaflet-bar m-4">
+        <button
+          onClick={onRecenter}
+          className="h-10 px-3 bg-gray-800 bg-opacity-90 text-white rounded hover:bg-gray-700 transition-colors duration-200 flex items-center shadow-lg border border-gray-600"
+          title="Center on your location"
+        >
+          <svg 
+            className="w-5 h-5 text-blue-400" 
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={2} 
+              d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
+            />
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={2} 
+              d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0" 
+            />
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={2} 
+              d="M12 2v4m0 12v4m10-10h-4m-12 0h-4" 
+            />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Update the LiveShareControl to only handle sharing controls
+const LiveShareControl: React.FC<Omit<LiveShareControlProps, 'onRecenter' | 'userPosition'>> = ({ 
   isSharing, 
   isSettingUp,
   isReconnecting = false,
   onStartSharing, 
-  onStopSharing 
+  onStopSharing,
 }) => {
   return (
     <div className="leaflet-top leaflet-right" style={{ zIndex: 1000 }}>
@@ -157,7 +205,7 @@ const LiveShareControl: React.FC<LiveShareControlProps> = ({
               <div className={`w-2 h-2 ${
                 isReconnecting ? 'bg-yellow-400' : 'bg-green-400'
               } rounded-full mr-2 animate-pulse`}></div>
-              {isReconnecting ? 'Reconnecting' : 'Live'}
+              {isReconnecting ? 'Locating' : 'Live'}
             </div>
           </div>
         )}
@@ -628,6 +676,14 @@ const MapView: React.FC<MapViewProps> = ({
             attribution={DARK_MAP_ATTRIBUTION}
             url={DARK_MAP_STYLE}
             className="dark-tiles"
+          />
+          <RecenterControl 
+            userPosition={userPosition}
+            onRecenter={() => {
+              if (userPosition) {
+                setDefaultCenter(userPosition);
+              }
+            }}
           />
           <LiveShareControl
             isSharing={isSharing}

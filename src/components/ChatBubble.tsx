@@ -121,24 +121,6 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
             : 'text-gray-200'
         } backdrop-blur-sm transition-all duration-300 relative`}
       >
-        {isCurrentUser && message.delivered && (
-          <div className="absolute bottom-2 right-2 text-green-400" title="Message delivered">
-            <svg 
-              className="w-4 h-4" 
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
-            >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
-          </div>
-        )}
-        
         <div className="font-bold text-sm mb-2 text-blue-300 flex items-center justify-between">
           <span>{isCurrentUser ? 'You' : (message.senderNickname || message.sender.slice(0, 6))}</span>
           {message.condition && (
@@ -182,11 +164,26 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
           )}
         </div>
         <div className="flex justify-between items-end mt-2">
-          <div className="text-xs text-gray-400">
-            {new Date(message.timestamp).toLocaleString()}
+          <div className="flex items-center space-x-2 text-xs">
+            <span className="text-gray-400">
+              {new Date(message.timestamp).toLocaleString()}
+            </span>
+            {isCurrentUser && (
+              <div 
+                className="flex items-center space-x-1" 
+                title={message.delivered ? "Message delivered" : "Sending..."}
+              >
+                <div className={`h-1.5 w-1.5 rounded-full ${
+                  message.delivered ? 'bg-blue-400' : 'bg-gray-400'
+                }`}></div>
+                <div className={`h-1.5 w-1.5 rounded-full transition-colors duration-300 ${
+                  message.delivered ? 'bg-blue-400' : 'bg-gray-600'
+                }`}></div>
+              </div>
+            )}
           </div>
           {timeRemaining && (
-            <div className="text-xs text-blue-300 ml-4">
+            <div className="text-xs text-blue-300">
               {timeRemaining}
             </div>
           )}
