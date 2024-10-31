@@ -1,5 +1,8 @@
 # Arc
 
+> **⚠️ WARNING**  
+> Arc is currently alpha software and may contain bugs or unexpected behavior. Use at your own risk and exercise caution when sharing sensitive location data.
+
 **Arc** is an experimental, privacy-preserving, permissionless, decentralized location-sharing application. Arc enables secure, end-to-end encrypted location sharing with fine-grained, on-chain access control, making it a powerful tool for individuals or groups needing private, censorship-resistant communication and location sharing.
 
 ## Features
@@ -30,11 +33,3 @@ Arc combines a range of decentralized technologies to provide a secure, censorsh
 
 - **Threshold Network’s TACO**  
   Through [TACO](https://threshold.network/), Arc provides a secure and censorship-resistant method for encryption and access control, allowing users to define their own privacy parameters directly on-chain.
-
-## Getting Started
-
-### Requirements
-
-- [Waku Network](https://waku.org/) node setup for P2P message routing
-- [Threshold Network](https://threshold.network/) integration for encryption and access control
-- Arc account and wallet configured for creating and managing on-chain access policies
