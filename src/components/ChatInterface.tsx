@@ -336,74 +336,65 @@ const ChatInterfaceInner: React.FC = () => {
     }
   }, [wakuNode, setupSubscription]);
 
-  useEffect(() => {
-    const setupWeb3 = async () => {
-      if (typeof window.ethereum !== 'undefined') {
-        try {
-          await window.ethereum.request({ method: 'eth_requestAccounts' });
-          const provider = new ethers.providers.Web3Provider(window.ethereum);
-          setWeb3Provider(provider);
-          const signer = provider.getSigner();
-          const address = await signer.getAddress();
-          setAccount(address);
+  const handleWalletConnect = useCallback(async (provider: ethers.providers.Web3Provider, connectedAccount: string) => {
+    try {
+      setWeb3Provider(provider);
+      setAccount(connectedAccount);
+      console.log('Wallet connected:', connectedAccount);
 
-          // Get the network information
-          const network = await provider.getNetwork();
-          setEthereumNetwork(network.name);
-          const isAmoy = network.chainId === 80002;
-          setIsCorrectNetwork(isAmoy);
+      // Get the network information
+      const network = await provider.getNetwork();
+      setEthereumNetwork(network.name);
+      const isAmoy = network.chainId === 80002;
+      setIsCorrectNetwork(isAmoy);
 
-          // If not on Amoy, prompt to switch only if we haven't tried before
-          if (!isAmoy && !hasAttemptedNetworkSwitch.current) {
-            console.log('Not on Polygon Amoy, prompting switch...');
-            hasAttemptedNetworkSwitch.current = true;
-            const switched = await switchToPolygonAmoy();
-            if (switched) {
-              console.log('Successfully switched to Polygon Amoy');
-              await initializeNewProvider();
-            } else {
-              console.log('Network switch pending - waiting for user action');
-            }
-          }
-
-          // Listen for network changes
-          window.ethereum.on('chainChanged', async (chainId: string) => {
-            console.log('Network changed to:', chainId);
-            const newChainId = parseInt(chainId, 16);
-            setIsCorrectNetwork(newChainId === 80002);
-            // Reset the switch attempt flag when network actually changes
-            hasAttemptedNetworkSwitch.current = false;
-            await initializeNewProvider();
-          });
-
-        } catch (error) {
-          console.error('Failed to initialize Web3:', error);
-          setEthereumNetwork('Unknown');
-          setIsCorrectNetwork(false);
+      // If not on Amoy, prompt to switch
+      if (!isAmoy) {
+        console.log('Not on Polygon Amoy, prompting switch...');
+        const switched = await switchToPolygonAmoy();
+        if (switched) {
+          console.log('Successfully switched to Polygon Amoy');
+          await initializeNewProvider();
+        } else {
+          console.log('Network switch pending - waiting for user action');
         }
-      } else {
-        console.log('Please install MetaMask!');
-        setEthereumNetwork('Not Connected');
-        setIsCorrectNetwork(false);
       }
-    };
 
-    setupWeb3();
+      // Create a single handler for network changes
+      const handleChainChange = async (chainId: string) => {
+        console.log('Network changed to:', chainId);
+        const newChainId = parseInt(chainId, 16);
+        setIsCorrectNetwork(newChainId === 80002);
+        await initializeNewProvider();
+      };
 
-    return () => {
-      if (window.ethereum && window.ethereum.removeListener) {
-        window.ethereum.removeListener('chainChanged', () => {
-          console.log('Removed chainChanged event listener');
-        });
-      }
-    };
+      // Remove any existing listeners first
+      window.ethereum?.removeListener('chainChanged', handleChainChange);
+      
+      // Add the new listener
+      window.ethereum?.on('chainChanged', handleChainChange);
+
+      // Clean up function
+      return () => {
+        window.ethereum?.removeListener('chainChanged', handleChainChange);
+      };
+
+    } catch (error) {
+      console.error('Failed to handle wallet connection:', error);
+      setEthereumNetwork('Unknown');
+      setIsCorrectNetwork(false);
+    }
   }, [initializeNewProvider]);
 
-  const handleWalletConnect = async (provider: ethers.providers.Web3Provider, connectedAccount: string) => {
-    setWeb3Provider(provider);
-    setAccount(connectedAccount);
-    console.log('Wallet connected:', connectedAccount);
-  };
+  // Add cleanup effect for the chain change listener
+  useEffect(() => {
+    return () => {
+      // Clean up any ethereum event listeners when component unmounts
+      if (window.ethereum?.removeListener) {
+        window.ethereum.removeAllListeners('chainChanged');
+      }
+    };
+  }, []);
 
   const handleConditionChange = (newCondition: any) => {
     setCondition(newCondition);
