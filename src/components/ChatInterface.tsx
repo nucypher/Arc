@@ -133,6 +133,49 @@ const ChatInterfaceInner: React.FC = () => {
     </svg>
   );
 
+  // Add this helper function
+  const initializeNewProvider = async () => {
+    // Wait a bit for MetaMask to complete its network switch
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    try {
+      // Create new provider
+      const newProvider = new ethers.providers.Web3Provider(window.ethereum);
+      
+      // Wait for provider to be ready and get network
+      await newProvider.ready;
+      const network = await newProvider.getNetwork();
+      
+      // Ensure we're on the right network
+      if (network.chainId === 80002) {
+        // Stop any existing subscriptions
+        setIsSubscribed(false);
+        
+        // Update provider and network state
+        setWeb3Provider(newProvider);
+        setEthereumNetwork('amoy');
+        setIsCorrectNetwork(true);
+
+        // Get new signer and update account if needed
+        const signer = newProvider.getSigner();
+        const address = await signer.getAddress();
+        setAccount(address);
+
+        // Reset subscription state to trigger resubscription with new provider
+        if (wakuNode) {
+          // Re-setup subscriptions with new provider
+          await setupSubscription();
+        }
+
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error initializing new provider:', error);
+      return false;
+    }
+  };
+
   useEffect(() => {
     const setupWeb3 = async () => {
       if (typeof window.ethereum !== 'undefined') {
@@ -156,21 +199,16 @@ const ChatInterfaceInner: React.FC = () => {
             const switched = await switchToPolygonAmoy();
             if (switched) {
               console.log('Successfully switched to Polygon Amoy');
-              setIsCorrectNetwork(true);
-              setEthereumNetwork('amoy');
+              await initializeNewProvider();
             } else {
               console.warn('Failed to switch to Polygon Amoy');
             }
           }
 
-          console.log('Web3 initialized, account:', address, 'network:', network.name);
-
           // Listen for network changes
-          window.ethereum.on('chainChanged', (chainId: string) => {
+          window.ethereum.on('chainChanged', async (chainId: string) => {
             console.log('Network changed to:', chainId);
-            const newNetwork = ethers.providers.getNetwork(parseInt(chainId));
-            setEthereumNetwork(newNetwork.name);
-            setIsCorrectNetwork(parseInt(chainId) === 80002);
+            await initializeNewProvider();
           });
 
         } catch (error) {
@@ -187,7 +225,6 @@ const ChatInterfaceInner: React.FC = () => {
 
     setupWeb3();
 
-    // Cleanup function
     return () => {
       if (window.ethereum && window.ethereum.removeListener) {
         window.ethereum.removeListener('chainChanged', () => {
