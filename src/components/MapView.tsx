@@ -363,7 +363,7 @@ const MapView: React.FC<MapViewProps> = ({
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
   const saveSuccessTimeoutRef = useRef<NodeJS.Timeout>();
 
-  const requestLocationPermission = async (): Promise<boolean> => {
+  const requestLocationPermission = async (): Promise<GeolocationPosition | false> => {
     console.log('Requesting location permission...');
     if (!("geolocation" in navigator)) {
       console.error('Geolocation not supported');
@@ -381,17 +381,12 @@ const MapView: React.FC<MapViewProps> = ({
         return false;
       }
 
-      // Only trigger the permission prompt if needed
-      if (permission.state === 'prompt') {
-        console.log('Triggering permission prompt...');
-        // Just get position without sending an update
-        await new Promise<GeolocationPosition>((resolve, reject) => {
+      // Get initial position if needed
+      if (permission.state === 'prompt' || !userPosition) {
+        console.log('Getting initial position...');
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(
-            (position) => {
-              // Just store the position without sending an update
-              setUserPosition([position.coords.latitude, position.coords.longitude]);
-              resolve(position);
-            },
+            resolve,
             reject,
             {
               enableHighAccuracy: true,
@@ -400,7 +395,10 @@ const MapView: React.FC<MapViewProps> = ({
             }
           );
         });
-        console.log('Permission prompt handled');
+        
+        // Just store the position locally, don't send update yet
+        setUserPosition([position.coords.latitude, position.coords.longitude]);
+        return position;
       }
 
       return true;
@@ -412,11 +410,19 @@ const MapView: React.FC<MapViewProps> = ({
   };
   const startLocationWatch = useCallback((options: PositionOptions = {}) => {
     if ("geolocation" in navigator) {
-      // Don't request permission here, just start watching
+      // Add a flag to ignore the first update
+      let isFirstUpdate = true;
+
       const watchId = navigator.geolocation.watchPosition(
         async (position) => {
           setUserPosition([position.coords.latitude, position.coords.longitude]);
           setIsReconnecting(false);
+
+          // Skip sending update for the first position as it's likely the same as our initial position
+          if (isFirstUpdate) {
+            isFirstUpdate = false;
+            return;
+          }
 
           try {
             await sendLocationUpdate(
@@ -474,17 +480,32 @@ const MapView: React.FC<MapViewProps> = ({
     setIsSettingUpSharing(true);
     
     try {
-      const hasPermission = await requestLocationPermission();
-      console.log('Permission check result:', hasPermission);
+      const permissionResult = await requestLocationPermission();
+      console.log('Permission check result:', permissionResult);
       
-      if (hasPermission) {
-        // Start watching with initial settings
-        startLocationWatch();
-        setIsSharing(true);
+      if (permissionResult) {
+        // If we got a position from permission request, just store it locally
+        if (permissionResult instanceof GeolocationPosition) {
+          console.log('Setting initial position locally');
+          setUserPosition([
+            permissionResult.coords.latitude,
+            permissionResult.coords.longitude
+          ]);
+          // Don't send an update here, let the watch handle it
+        }
+
+        // Add a small delay before starting the watch to ensure we don't get duplicate positions
+        setTimeout(() => {
+          startLocationWatch({
+            // Start with less frequent updates initially
+            maximumAge: 10000, // Use cached position if it's less than 10 seconds old
+            timeout: 20000,
+          });
+          setIsSharing(true);
+        }, 1000);
       }
     } catch (error) {
       console.error('Error setting up location sharing:', error);
-      // Don't stop sharing, just show reconnecting state
       setIsReconnecting(true);
     } finally {
       setIsSettingUpSharing(false);
