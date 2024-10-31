@@ -137,18 +137,20 @@ const LiveShareControl: React.FC<LiveShareControlProps> = ({
 const DARK_MAP_STYLE = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const DARK_MAP_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
-// Remove the previous icon definitions and add this new function
+// Update the createBlockieMarker function
 const createBlockieMarker = (address: string, isUser: boolean = false) => {
   const blockieUrl = makeBlockie(address);
+  const color = isUser ? 'rgb(59, 130, 246)' : 'rgb(234, 179, 8)'; // blue-500 and yellow-500
   
   return new L.DivIcon({
     html: `
       <div class="relative">
         <img 
           src="${blockieUrl}" 
-          class="w-8 h-8 rounded-full border-2 ${isUser ? 'border-blue-500' : 'border-yellow-500'} shadow-lg"
+          class="w-8 h-8 rounded-full border-2"
+          style="border-color: ${color}; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.2)"
         />
-        ${isUser ? '<div class="absolute -bottom-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-gray-900"></div>' : ''}
+        ${isUser ? `<div class="absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-gray-900" style="background-color: ${color}"></div>` : ''}
       </div>
     `,
     className: 'custom-blockie-marker',
@@ -157,6 +159,25 @@ const createBlockieMarker = (address: string, isUser: boolean = false) => {
     popupAnchor: [0, -32]
   });
 };
+
+// Add these styles to your global CSS file or add them inline in the component
+const darkPopupStyle = `
+  .dark-theme-popup .leaflet-popup-content-wrapper {
+    background-color: #1a1a1a;
+    color: #ffffff;
+    border: 1px solid #333;
+  }
+  .dark-theme-popup .leaflet-popup-tip {
+    background-color: #1a1a1a;
+    border: 1px solid #333;
+  }
+  .dark-theme-popup .leaflet-popup-close-button {
+    color: #666;
+  }
+  .dark-theme-popup .leaflet-popup-close-button:hover {
+    color: #999;
+  }
+`;
 
 const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, nickname, liveLocations, centerOnUser }) => {
   const [isSharing, setIsSharing] = useState(false);
@@ -532,6 +553,8 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
 
   return (
     <div className="flex-1 bg-gray-900">
+      <style>{darkPopupStyle}</style>
+      
       <div className="text-gray-300 h-full flex flex-col">
         {locationError && (
           <div className="p-3 bg-red-900 bg-opacity-50 border border-red-700 text-red-200">
@@ -574,13 +597,11 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
             {userPosition && (
               <Marker position={userPosition} icon={createBlockieMarker(account, true)}>
                 <Popup className="dark-theme-popup">
-                  <div className="text-gray-200 bg-gray-800 p-2 rounded">
-                    <div className="flex items-center">
-                      <Blockie address={account} size={24} className="mr-2" />
-                      <strong className="text-blue-400">Your Location</strong>
-                    </div>
-                    <small className="text-gray-400 block mt-1">Last updated: {new Date().toLocaleString()}</small>
+                  <div className="flex items-center">
+                    <Blockie address={account} size={24} className="mr-2" />
+                    <strong className="text-blue-400">Your Location</strong>
                   </div>
+                  <small className="text-gray-400 block mt-1">Last updated: {new Date().toLocaleString()}</small>
                 </Popup>
               </Marker>
             )}
@@ -592,19 +613,17 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
                 icon={createBlockieMarker(marker.sender)}
               >
                 <Popup className="dark-theme-popup">
-                  <div className="text-gray-200 bg-gray-800 p-2 rounded">
-                    <div className="flex items-center">
-                      <Blockie address={marker.sender} size={24} className="mr-2" />
-                      <strong className="text-yellow-400">{marker.sender}</strong>
-                    </div>
-                    <small className="text-gray-400 block mt-1">{new Date(marker.timestamp).toLocaleString()}</small>
-                    {marker.isLive && (
-                      <div className="text-green-400 text-xs mt-1 flex items-center">
-                        <div className="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse"></div>
-                        Live
-                      </div>
-                    )}
+                  <div className="flex items-center">
+                    <Blockie address={marker.sender} size={24} className="mr-2" />
+                    <strong className="text-yellow-400">{marker.sender}</strong>
                   </div>
+                  <small className="text-gray-400 block mt-1">{new Date(marker.timestamp).toLocaleString()}</small>
+                  {marker.isLive && (
+                    <div className="text-green-400 text-xs mt-1 flex items-center">
+                      <div className="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse"></div>
+                      Live
+                    </div>
+                  )}
                 </Popup>
               </Marker>
             ))}
