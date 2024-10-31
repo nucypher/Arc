@@ -5,8 +5,8 @@ import { encryptMessage, decryptMessage } from './taco';
 import { LocationUpdate } from '../components/MapView';
 
 export const domainUUID = '876c3672-d8ca-4778-88e7-954f35cb2bbd';
-export const defaultContentTopic = `/taco-${domainUUID}/1/messages/proto`;
-export const locationContentTopic = `/taco-${domainUUID}/1/messages/data`;
+export const defaultContentTopic = `/arc/1/global-chat/proto`;
+export const locationContentTopic = `/arc/1/global-location/proto`;
 
 export const messageEncoder = createEncoder({ contentTopic: defaultContentTopic, ephemeral: true });
 export const locationEncoder = createEncoder({ contentTopic: locationContentTopic, ephemeral: true });
@@ -184,7 +184,8 @@ export const sendLocationUpdate = async (
 export const subscribeToLocationUpdates = async (
   callback: (update: LocationUpdate) => void,
   web3Provider: any,
-  currentDomain: any
+  currentDomain: any,
+  topic: string = locationContentTopic
 ) => {
   if (!wakuNode) {
     console.error('[Location] Waku node not initialized');
@@ -192,7 +193,7 @@ export const subscribeToLocationUpdates = async (
   }
 
   try {
-    const subscription = await wakuNode.filter.subscribe([createDecoder(locationContentTopic)], async (wakuMessage: any) => {
+    const subscription = await wakuNode.filter.subscribe([createDecoder(topic)], async (wakuMessage: any) => {
       if (!wakuMessage.payload) return;
 
       try {
@@ -232,7 +233,7 @@ export const subscribeToLocationUpdates = async (
       }
     });
 
-    console.log(`Successfully subscribed to topic: ${locationContentTopic}`);
+    console.log(`Successfully subscribed to topic: ${topic}`);
     return subscription;
   } catch (error) {
     console.error('[Location] Error setting up location subscription:', error);

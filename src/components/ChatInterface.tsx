@@ -180,6 +180,9 @@ const ChatInterfaceInner: React.FC = () => {
         subscriptionRef.current = null;
       }
 
+      // Create the location topic by replacing "-chat" with "-location"
+      const locationTopic = currentTopic.name.replace('-chat', '-location');
+
       // Subscribe to messages
       const messageSubscription = await subscribeToMessages(currentTopic.name, async (decodedMessage: any) => {
         setTimeout(async () => {
@@ -263,7 +266,7 @@ const ChatInterfaceInner: React.FC = () => {
         }, 500);
       });
       
-      // Subscribe to location updates
+      // Subscribe to location updates for the current channel
       const locationSubscription = await subscribeToLocationUpdates(
         (update: LocationUpdate) => {
           setLiveLocations(prev => {
@@ -273,7 +276,8 @@ const ChatInterfaceInner: React.FC = () => {
           });
         },
         web3Provider,
-        currentDomain
+        currentDomain,
+        locationTopic // Pass the channel-specific location topic
       );
 
       // Store subscriptions for cleanup
@@ -541,12 +545,16 @@ const ChatInterfaceInner: React.FC = () => {
     setMessages([]);
   };
 
-  const handleTopicCreate = (newTopicName: string) => {
-    // Ensure the base structure is maintained
-    const baseTopicPath = '/taco-chat/1/messages/';
-    const fullNewTopic = `${baseTopicPath}${newTopicName}`;
+  const handleTopicCreate = async (newTopicName: string) => {
+    // Ensure the base structure is maintained with the channel name in the third position
+    const baseTopicPath = '/arc/1/';
+    // Append -chat suffix to the channel name
+    const fullNewTopic = `${baseTopicPath}${newTopicName}-chat/proto`;
 
     if (!topics.some(topic => topic.name === fullNewTopic)) {
+      // Create both chat and location topics
+      const locationTopic = `${baseTopicPath}${newTopicName}-location/proto`;
+      
       setTopics(prevTopics => [
         ...prevTopics, 
         { 
@@ -555,9 +563,37 @@ const ChatInterfaceInner: React.FC = () => {
           lastMessageTime: Date.now() 
         }
       ]);
+      
+      // Set the current topic
       setCurrentTopic({ name: fullNewTopic });
+      
       // Clear messages for the new topic
       setMessages([]);
+      
+      // Reset subscription state to trigger new subscription
+      setIsSubscribed(false);
+      
+      // Clean up existing subscription if any
+      if (subscriptionRef.current) {
+        console.log('Cleaning up existing subscription before creating new one');
+        subscriptionRef.current.unsubscribe();
+        subscriptionRef.current = null;
+      }
+
+      try {
+        // Wait a brief moment for state updates to complete
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Set up new subscription for the new topic
+        if (wakuNode && web3Provider) {
+          console.log('Setting up subscription for new topic:', fullNewTopic);
+          await setupSubscription();
+        } else {
+          console.warn('Cannot set up subscription: Waku node or web3Provider not available');
+        }
+      } catch (error) {
+        console.error('Error setting up subscription for new topic:', error);
+      }
     }
   };
 

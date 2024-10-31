@@ -36,7 +36,9 @@ const TopicSidebar: React.FC<TopicSidebarProps> = ({
   };
 
   const getTopicName = (fullPath: string) => {
-    return fullPath.split('/').pop() || fullPath;
+    const parts = fullPath.split('/');
+    const channelWithSuffix = parts[3] || fullPath;
+    return channelWithSuffix.replace(/-chat$/, '');
   };
 
   const truncateAddress = (address: string) => {
