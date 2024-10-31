@@ -52,7 +52,7 @@ const ChatInterfaceInner: React.FC = () => {
     return defaultCondition;
   });
   const [conditionDescription, setConditionDescription] = useState<string | null>(null);
-  const [currentDomain, setCurrentDomain] = useState<domains>(domains.TESTNET);
+  const [currentDomain, setCurrentDomain] = useState<Record<string, string>>(domains.TESTNET);
   const [nickname, setNickname] = useState<string>(() => {
     return localStorage.getItem('userNickname') || 'Anonymous';
   });
@@ -76,6 +76,7 @@ const ChatInterfaceInner: React.FC = () => {
   const [liveLocations, setLiveLocations] = useState<Map<string, LocationUpdate>>(new Map());
   const [activeUsers, setActiveUsers] = useState<Map<string, { nickname: string; lastSeen: number; address: string }>>(new Map());
   const [centerOnUserId, setCenterOnUserId] = useState<string | undefined>();
+  const [error, setError] = useState<string | null>(null);
 
   // Add a ref to track subscription cleanup
   const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
@@ -420,7 +421,7 @@ const ChatInterfaceInner: React.FC = () => {
     setConditionDescription(description);
   };
 
-  const handleDomainChange = (domain: domains, newRitualId: string) => {
+  const handleDomainChange = (domain: typeof domains, newRitualId: string) => {
     setCurrentDomain(domain);
     setRitualId(newRitualId);
   };
@@ -539,9 +540,8 @@ const ChatInterfaceInner: React.FC = () => {
     }
   };
 
-  const handleTopicSelect = (topicName: string) => {
-    setCurrentTopic({ name: topicName });
-    // You might want to clear messages or fetch messages for the new topic here
+  const handleTopicSelect = (topic: { name: string }) => {
+    setCurrentTopic(topic);
     setMessages([]);
   };
 

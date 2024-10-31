@@ -34,12 +34,6 @@ const MapUpdater: React.FC<{ center: [number, number] }> = ({ center }) => {
 };
 
 interface MapViewProps {
-  messages: Array<{
-    content: string;
-    timestamp: number;
-    sender: string;
-    senderNickname: string;
-  }>;
   onShareLocation?: (location: { lat: number; lng: number }) => void;
   account: string;
   nickname: string;
@@ -48,7 +42,7 @@ interface MapViewProps {
   onSendMessage: (e: React.FormEvent) => Promise<void>;
   inputText: string;
   onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  messages: Message[];
+  messages: ChatMessage[];
   isCurrentUser: (sender: string) => boolean;
   canDecryptMessage: (condition?: string) => boolean;
   decryptingMessages: Set<number>;
@@ -299,7 +293,7 @@ const SaveIndicator: React.FC<SaveIndicatorProps> = ({ isSaving, showSuccess }) 
 };
 
 const MapView: React.FC<MapViewProps> = ({
-  messages,
+  onShareLocation,
   account,
   nickname,
   liveLocations,
@@ -307,7 +301,7 @@ const MapView: React.FC<MapViewProps> = ({
   onSendMessage,
   inputText,
   onInputChange,
-  messages: chatMessages,
+  messages,
   isCurrentUser,
   canDecryptMessage,
   decryptingMessages,
@@ -699,7 +693,7 @@ const MapView: React.FC<MapViewProps> = ({
 
       <div className="absolute top-32 right-8 bottom-24 w-96 overflow-hidden z-[1000]">
         <div className="h-full overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
-          {chatMessages.map((message) => (
+          {messages.map((message) => (
             <div key={message.id} className="backdrop-blur-sm bg-black bg-opacity-30 rounded-lg">
               <ChatBubble
                 message={message}
