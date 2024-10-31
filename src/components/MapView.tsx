@@ -14,7 +14,7 @@ L.Icon.Default.mergeOptions({
 
 // Create a custom icon for the user's location
 const userIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-violet.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
@@ -24,7 +24,7 @@ const userIcon = new L.Icon({
 
 // Create a custom icon for received location updates
 const receivedLocationIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-yellow.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
@@ -85,25 +85,25 @@ const LiveShareControl: React.FC<LiveShareControlProps> = ({
           <button
             onClick={onStartSharing}
             disabled={isSettingUp}
-            className={`px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors duration-200 flex items-center shadow-lg ${
+            className={`px-4 py-2 bg-gray-800 bg-opacity-90 text-white rounded hover:bg-gray-700 transition-colors duration-200 flex items-center shadow-lg border border-gray-600 ${
               isSettingUp ? 'opacity-75 cursor-not-allowed' : ''
             }`}
           >
             {isSettingUp ? (
               <>
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Connecting...
+                <span className="text-blue-400">Connecting...</span>
               </>
             ) : (
               <>
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-                Start Live Sharing
+                <span className="text-blue-400">Start Live Sharing</span>
               </>
             )}
           </button>
@@ -111,15 +111,15 @@ const LiveShareControl: React.FC<LiveShareControlProps> = ({
           <div className="flex flex-col space-y-2">
             <button
               onClick={onStopSharing}
-              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors duration-200 flex items-center shadow-lg"
+              className="px-4 py-2 bg-gray-800 bg-opacity-90 text-white rounded hover:bg-gray-700 transition-colors duration-200 flex items-center shadow-lg border border-red-800"
             >
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 mr-2 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
-              Stop Sharing
+              <span className="text-red-400">Stop Sharing</span>
             </button>
-            <div className="flex items-center justify-center bg-black bg-opacity-50 text-green-500 px-2 py-1 rounded shadow-lg">
-              <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+            <div className="flex items-center justify-center bg-gray-800 bg-opacity-90 text-green-400 px-2 py-1 rounded shadow-lg border border-gray-600">
+              <div className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></div>
               Live
             </div>
           </div>
@@ -128,6 +128,10 @@ const LiveShareControl: React.FC<LiveShareControlProps> = ({
     </div>
   );
 };
+
+// Add this dark style URL for the map tiles
+const DARK_MAP_STYLE = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+const DARK_MAP_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
 const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, nickname }) => {
   const [isSharing, setIsSharing] = useState(false);
@@ -503,18 +507,30 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
           </div>
         )}
 
-        {/* Map - now using full height */}
+        {/* Map - now using dark theme */}
         <div className="flex-1 relative">
           <MapContainer
             center={defaultCenter}
             zoom={13}
             style={{ height: '100%', width: '100%' }}
+            zoomControl={false} // Hide default zoom control
+            className="dark-theme-map" // Add custom class for additional styling
           >
             <MapUpdater center={defaultCenter} />
             <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution={DARK_MAP_ATTRIBUTION}
+              url={DARK_MAP_STYLE}
+              className="dark-tiles"
             />
+            {/* Add zoom control in custom position */}
+            <div className="leaflet-control-container">
+              <div className="leaflet-top leaflet-left">
+                <div className="leaflet-control-zoom leaflet-bar leaflet-control">
+                  <a className="leaflet-control-zoom-in" href="#" title="Zoom in" role="button" aria-label="Zoom in">+</a>
+                  <a className="leaflet-control-zoom-out" href="#" title="Zoom out" role="button" aria-label="Zoom out">−</a>
+                </div>
+              </div>
+            </div>
             {/* Live sharing control */}
             <LiveShareControl
               isSharing={isSharing}
@@ -525,11 +541,11 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
             {/* User position marker */}
             {userPosition && (
               <Marker position={userPosition} icon={userIcon}>
-                <Popup>
-                  <div>
-                    <strong>Your Location</strong>
+                <Popup className="dark-theme-popup">
+                  <div className="text-gray-200 bg-gray-800 p-2 rounded">
+                    <strong className="text-blue-400">Your Location</strong>
                     <br />
-                    <small>Last updated: {new Date().toLocaleString()}</small>
+                    <small className="text-gray-400">Last updated: {new Date().toLocaleString()}</small>
                   </div>
                 </Popup>
               </Marker>
@@ -541,14 +557,15 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
                 position={marker.position}
                 icon={receivedLocationIcon}
               >
-                <Popup>
-                  <div>
-                    <strong>{marker.sender}</strong>
+                <Popup className="dark-theme-popup">
+                  <div className="text-gray-200 bg-gray-800 p-2 rounded">
+                    <strong className="text-yellow-400">{marker.sender}</strong>
                     <br />
-                    <small>{new Date(marker.timestamp).toLocaleString()}</small>
+                    <small className="text-gray-400">{new Date(marker.timestamp).toLocaleString()}</small>
                     {marker.isLive && (
-                      <div className="text-green-500 text-xs mt-1">
-                        ● Live
+                      <div className="text-green-400 text-xs mt-1 flex items-center">
+                        <div className="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse"></div>
+                        Live
                       </div>
                     )}
                   </div>
