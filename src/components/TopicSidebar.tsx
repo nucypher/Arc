@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Blockie from './Blockie';
 
 interface TopicSidebarProps {
   topics: Array<{
@@ -99,7 +100,7 @@ const TopicSidebar: React.FC<TopicSidebarProps> = ({
                         className="px-3 py-1 flex items-center text-sm text-gray-400 hover:bg-gray-700 transition-colors duration-150"
                         title={userId} // Show full address on hover
                       >
-                        <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                        <Blockie address={userId} size={20} className="mr-2" />
                         <span className="truncate flex-1">
                           {user.nickname === 'Anonymous' ? truncateAddress(userId) : user.nickname}
                         </span>

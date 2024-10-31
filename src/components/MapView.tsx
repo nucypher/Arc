@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { sendLocationUpdate, subscribeToLocationUpdates } from '../lib/wakuSetup';
+import Blockie from './Blockie';
 
 // Fix for default marker icons in react-leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -543,9 +544,11 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
               <Marker position={userPosition} icon={userIcon}>
                 <Popup className="dark-theme-popup">
                   <div className="text-gray-200 bg-gray-800 p-2 rounded">
-                    <strong className="text-blue-400">Your Location</strong>
-                    <br />
-                    <small className="text-gray-400">Last updated: {new Date().toLocaleString()}</small>
+                    <div className="flex items-center">
+                      <Blockie address={account} size={24} className="mr-2" />
+                      <strong className="text-blue-400">Your Location</strong>
+                    </div>
+                    <small className="text-gray-400 block mt-1">Last updated: {new Date().toLocaleString()}</small>
                   </div>
                 </Popup>
               </Marker>
@@ -559,9 +562,11 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
               >
                 <Popup className="dark-theme-popup">
                   <div className="text-gray-200 bg-gray-800 p-2 rounded">
-                    <strong className="text-yellow-400">{marker.sender}</strong>
-                    <br />
-                    <small className="text-gray-400">{new Date(marker.timestamp).toLocaleString()}</small>
+                    <div className="flex items-center">
+                      <Blockie address={marker.sender} size={24} className="mr-2" />
+                      <strong className="text-yellow-400">{marker.sender}</strong>
+                    </div>
+                    <small className="text-gray-400 block mt-1">{new Date(marker.timestamp).toLocaleString()}</small>
                     {marker.isLive && (
                       <div className="text-green-400 text-xs mt-1 flex items-center">
                         <div className="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse"></div>

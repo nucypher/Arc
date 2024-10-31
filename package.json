@@ -12,6 +12,7 @@
     "@nucypher/taco": "^0.5.0",
     "@nucypher/taco-auth": "^0.2.0",
     "@waku/sdk": "^0.0.29",
+    "ethereum-blockies-base64": "^1.0.2",
     "ethers": "^5.7.2",
     "leaflet": "^1.9.4",
     "next": "14.2.15",
