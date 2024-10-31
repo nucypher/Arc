@@ -63,6 +63,48 @@ interface LocationUpdate {
   isLive: boolean;
 }
 
+// Add this new control component for the live sharing button
+const LiveShareControl: React.FC<{
+  isSharing: boolean;
+  onStartSharing: () => void;
+  onStopSharing: () => void;
+}> = ({ isSharing, onStartSharing, onStopSharing }) => {
+  return (
+    <div className="leaflet-top leaflet-right" style={{ zIndex: 1000 }}>
+      <div className="leaflet-control leaflet-bar m-4">
+        {!isSharing ? (
+          <button
+            onClick={onStartSharing}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors duration-200 flex items-center shadow-lg"
+          >
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Start Live Sharing
+          </button>
+        ) : (
+          <div className="flex flex-col space-y-2">
+            <button
+              onClick={onStopSharing}
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors duration-200 flex items-center shadow-lg"
+            >
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Stop Sharing
+            </button>
+            <div className="flex items-center justify-center bg-black bg-opacity-50 text-green-500 px-2 py-1 rounded shadow-lg">
+              <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+              Live
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, nickname }) => {
   const [isSharing, setIsSharing] = useState(false);
   const watchIdRef = useRef<number | null>(null);
@@ -227,12 +269,10 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
 
   // Subscribe to location updates
   useEffect(() => {
-    let unsubscribe: (() => Promise<void>) | undefined;
-    
     const setupLocationSubscription = async () => {
       try {
         console.log('[Location] Setting up subscription to location updates');
-        const subscription = await subscribeToLocationUpdates((update: LocationUpdate) => {
+        await subscribeToLocationUpdates((update: LocationUpdate) => {
           console.log('[Location] Received location update:', update);
           setLiveLocations(prev => {
             const next = new Map(prev);
@@ -240,7 +280,6 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
             return next;
           });
         });
-        unsubscribe = subscription;
         console.log('[Location] Subscription setup complete');
       } catch (error) {
         console.error('[Location] Failed to subscribe to location updates:', error);
@@ -249,13 +288,9 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
 
     setupLocationSubscription();
 
+    // No cleanup needed since Waku doesn't provide an unsubscribe mechanism
     return () => {
-      if (unsubscribe) {
-        console.log('[Location] Cleaning up location subscription');
-        unsubscribe().catch(error => {
-          console.error('[Location] Error unsubscribing from location updates:', error);
-        });
-      }
+      console.log('[Location] Component unmounting, subscription will remain active');
     };
   }, []);
 
@@ -423,47 +458,16 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
   ];
 
   return (
-    <div className="flex-1 bg-gray-900 p-4">
-      <div className="text-gray-300">
+    <div className="flex-1 bg-gray-900">
+      <div className="text-gray-300 h-full flex flex-col">
         {locationError && (
-          <div className="mb-4 p-3 bg-red-900 bg-opacity-50 rounded border border-red-700 text-red-200">
+          <div className="p-3 bg-red-900 bg-opacity-50 border border-red-700 text-red-200">
             {locationError}
           </div>
         )}
-        {/* Location sharing controls */}
-        <div className="mb-4 flex space-x-4">
-          {!isSharing ? (
-            <button
-              onClick={startSharingLocation}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors duration-200 flex items-center"
-            >
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              Start Live Sharing
-            </button>
-          ) : (
-            <button
-              onClick={stopSharingLocation}
-              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors duration-200 flex items-center"
-            >
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-              Stop Sharing
-            </button>
-          )}
-          {isSharing && (
-            <div className="flex items-center text-green-500">
-              <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-              Live sharing active
-            </div>
-          )}
-        </div>
 
-        {/* Map */}
-        <div className="h-[500px] rounded-lg overflow-hidden mb-4">
+        {/* Map - now using full height */}
+        <div className="flex-1 relative">
           <MapContainer
             center={defaultCenter}
             zoom={13}
@@ -473,6 +477,12 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {/* Live sharing control */}
+            <LiveShareControl
+              isSharing={isSharing}
+              onStartSharing={startSharingLocation}
+              onStopSharing={stopSharingLocation}
             />
             {/* User position marker */}
             {userPosition && (
@@ -508,28 +518,6 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
               </Marker>
             ))}
           </MapContainer>
-        </div>
-        
-        {/* List of shared locations */}
-        <div className="space-y-2">
-          {allMarkers.map((marker, index) => (
-            <div key={index} className="bg-gray-800 rounded p-3 flex justify-between items-center">
-              <div>
-                <span className="text-blue-400">{marker.sender}</span>
-                <span className="text-gray-500 text-sm ml-2">
-                  {new Date(marker.timestamp).toLocaleString()}
-                </span>
-              </div>
-              <a 
-                href={`https://www.google.com/maps?q=${marker.position[0]},${marker.position[1]}`}
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-blue-500 hover:text-blue-400"
-              >
-                View on Google Maps
-              </a>
-            </div>
-          ))}
         </div>
       </div>
     </div>
