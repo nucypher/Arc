@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { sendLocationUpdate, subscribeToLocationUpdates } from '../lib/wakuSetup';
 
 // Fix for default marker icons in react-leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -40,6 +41,16 @@ interface MapViewProps {
   onShareLocation?: (location: { lat: number; lng: number }) => void;
 }
 
+interface LocationUpdate {
+  sender: string;
+  nickname: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  timestamp: number;
+  isLive: boolean;
+}
+
 const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation }) => {
   const [isSharing, setIsSharing] = useState(false);
   const watchIdRef = useRef<number | null>(null);
@@ -47,6 +58,7 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation }) => {
   const [hasSetInitialPosition, setHasSetInitialPosition] = useState(false);
   const [userPosition, setUserPosition] = useState<[number, number] | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [liveLocations, setLiveLocations] = useState<Map<string, LocationUpdate>>(new Map());
 
   // Get user's initial position for map center
   useEffect(() => {
@@ -201,6 +213,34 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation }) => {
     }
   };
 
+  // Subscribe to location updates
+  useEffect(() => {
+    let subscription: any;
+    
+    const setupLocationSubscription = async () => {
+      try {
+        subscription = await subscribeToLocationUpdates((update: LocationUpdate) => {
+          console.log('Received location update:', update);
+          setLiveLocations(prev => {
+            const next = new Map(prev);
+            next.set(update.sender, update);
+            return next;
+          });
+        });
+      } catch (error) {
+        console.error('Failed to subscribe to location updates:', error);
+      }
+    };
+
+    setupLocationSubscription();
+
+    return () => {
+      if (subscription) {
+        subscription.unsubscribe();
+      }
+    };
+  }, []);
+
   const startSharingLocation = async () => {
     console.log('Starting location sharing...');
     const hasPermission = await requestLocationPermission();
@@ -210,13 +250,27 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation }) => {
     if ("geolocation" in navigator) {
       console.log('Setting up live location sharing...');
       watchIdRef.current = navigator.geolocation.watchPosition(
-        (position) => {
+        async (position) => {
           console.log('Live sharing position update:', {
             lat: position.coords.latitude,
             lng: position.coords.longitude,
             accuracy: position.coords.accuracy,
             timestamp: new Date(position.timestamp).toISOString()
           });
+
+          try {
+            await sendLocationUpdate(
+              account,
+              nickname,
+              position.coords.latitude,
+              position.coords.longitude,
+              position.coords.accuracy,
+              true
+            );
+          } catch (error) {
+            console.error('Failed to send location update:', error);
+          }
+
           if (onShareLocation) {
             onShareLocation({
               lat: position.coords.latitude,
@@ -296,6 +350,17 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation }) => {
     return <div className="flex-1 bg-gray-900 p-4 text-gray-300">Loading map...</div>;
   }
 
+  // Add live location markers to the map
+  const allMarkers = [
+    ...locationMarkers,
+    ...[...liveLocations.values()].map(update => ({
+      position: [update.latitude, update.longitude] as [number, number],
+      sender: update.nickname,
+      timestamp: update.timestamp,
+      isLive: update.isLive
+    }))
+  ];
+
   return (
     <div className="flex-1 bg-gray-900 p-4">
       <div className="text-gray-300">
@@ -361,13 +426,18 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation }) => {
               </Marker>
             )}
             {/* Other location markers */}
-            {locationMarkers.map((marker, index) => (
+            {allMarkers.map((marker, index) => (
               <Marker key={index} position={marker.position}>
                 <Popup>
                   <div>
                     <strong>{marker.sender}</strong>
                     <br />
                     <small>{new Date(marker.timestamp).toLocaleString()}</small>
+                    {marker.isLive && (
+                      <div className="text-green-500 text-xs mt-1">
+                        ● Live
+                      </div>
+                    )}
                   </div>
                 </Popup>
               </Marker>
@@ -377,7 +447,7 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation }) => {
         
         {/* List of shared locations */}
         <div className="space-y-2">
-          {locationMarkers.map((marker, index) => (
+          {allMarkers.map((marker, index) => (
             <div key={index} className="bg-gray-800 rounded p-3 flex justify-between items-center">
               <div>
                 <span className="text-blue-400">{marker.sender}</span>
