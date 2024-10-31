@@ -7,6 +7,8 @@ import Blockie from './Blockie';
 import makeBlockie from 'ethereum-blockies-base64';
 import { FaMapMarkerAlt } from 'react-icons/fa';
 import ChatBubble from './ChatBubble';
+import TacoConditionBuilder from './TacoConditionBuilder';
+import TacoDomainSelector from './TacoDomainSelector';
 
 // Fix for default marker icons in react-leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -68,6 +70,13 @@ interface MapViewProps {
   isSettingsOpen: boolean;
   onCloseSettings: () => void;
   settingsContent: React.ReactNode;
+  onNicknameChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onSaveNickname: () => void;
+  isEditingNickname: boolean;
+  setIsEditingNickname: (isEditing: boolean) => void;
+  handleConditionChange: (condition: any) => void;
+  handleDomainChange: (domain: any, ritualId: string) => void;
+  currentDomain: any;
 }
 
 interface LocationUpdate {
@@ -224,6 +233,13 @@ const MapView: React.FC<MapViewProps> = ({
   isSettingsOpen,
   onCloseSettings,
   settingsContent,
+  onNicknameChange,
+  onSaveNickname,
+  isEditingNickname,
+  setIsEditingNickname,
+  handleConditionChange,
+  handleDomainChange,
+  currentDomain,
 }) => {
   const [isSharing, setIsSharing] = useState(false);
   const watchIdRef = useRef<number | null>(null);
@@ -554,6 +570,10 @@ const MapView: React.FC<MapViewProps> = ({
     }
   }, [centerOnUser, liveLocations]);
 
+  const truncateAddress = (address: string) => {
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
+
   if (!hasSetInitialPosition) {
     return (
       <div className="flex-1 bg-gray-900 flex items-center justify-center">
@@ -606,12 +626,12 @@ const MapView: React.FC<MapViewProps> = ({
         </div>
       )}
 
-      {/* Map - position it under everything with negative left margin */}
-      <div className="absolute inset-0 -left-64 z-0">
+      {/* Map - adjust width calculation to prevent overflow */}
+      <div className="absolute inset-0 z-0">
         <MapContainer
           center={defaultCenter}
           zoom={13}
-          style={{ height: '100%', width: 'calc(100% + 16rem)' }} // Add 16rem (64px * 4) to width
+          style={{ height: '100%', width: '100%' }}
           zoomControl={false}
           className="dark-theme-map"
         >
@@ -717,12 +737,8 @@ const MapView: React.FC<MapViewProps> = ({
         <div className="absolute inset-0 bg-black bg-opacity-50 z-[2000] flex justify-end">
           <div className="w-96 bg-gray-900 h-full overflow-y-auto border-l border-gray-800">
             <div className="p-6">
-              {/* Header */}
-              <div className="flex justify-between items-center mb-8">
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-200">Settings</h2>
-                  <p className="text-sm text-gray-400 mt-1">Configure your encryption and network settings</p>
-                </div>
+              {/* Close button */}
+              <div className="flex justify-end mb-6">
                 <button
                   onClick={onCloseSettings}
                   className="text-gray-400 hover:text-gray-300 transition-colors"
@@ -735,43 +751,87 @@ const MapView: React.FC<MapViewProps> = ({
 
               {/* Settings Sections */}
               <div className="space-y-8">
-                {/* Encryption Settings */}
+                {/* Identity Settings */}
                 <div className="space-y-4">
                   <div className="border-b border-gray-800 pb-2">
-                    <h3 className="text-lg font-medium text-gray-200">Encryption</h3>
-                    <p className="text-sm text-gray-400">Configure message encryption conditions</p>
+                    <h3 className="text-lg font-medium text-gray-200">Identity</h3>
+                    <p className="text-sm text-gray-400">Your profile settings</p>
                   </div>
-                  <div className="bg-gray-800 bg-opacity-50 rounded-lg p-4">
-                    {settingsContent}
+                  <div className="bg-gray-800 bg-opacity-50 rounded-lg p-4 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Nickname</span>
+                      <div className="flex items-center space-x-2">
+                        {isEditingNickname ? (
+                          <>
+                            <input
+                              type="text"
+                              value={nickname}
+                              onChange={onNicknameChange}
+                              className="px-2 py-1 bg-gray-700 text-gray-200 rounded border border-gray-600 focus:outline-none focus:border-blue-500"
+                              placeholder="Enter nickname"
+                            />
+                            <button
+                              onClick={onSaveNickname}
+                              className="text-blue-400 hover:text-blue-300"
+                            >
+                              Save
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-gray-200">{nickname}</span>
+                            <button
+                              onClick={() => setIsEditingNickname(true)}
+                              className="text-blue-400 hover:text-blue-300"
+                            >
+                              Edit
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Wallet</span>
+                      <div className="flex items-center space-x-2">
+                        <Blockie address={account} size={20} className="mr-2" />
+                        <span className="text-gray-200">{truncateAddress(account)}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Network Info */}
+                {/* Message Encryption Settings */}
+                <div className="space-y-6">
+                  <div className="border-b border-gray-800 pb-2">
+                    <h3 className="text-lg font-medium text-gray-200">Message Encryption</h3>
+                    <p className="text-sm text-gray-400">Choose how your messages will be encrypted</p>
+                  </div>
+
+                  {/* Condition Builder */}
+                  <div className="bg-gray-800 bg-opacity-50 rounded-lg p-4">
+                    <div className="space-y-4">
+                      <TacoConditionBuilder onConditionChange={handleConditionChange} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Network Settings */}
                 <div className="space-y-4">
                   <div className="border-b border-gray-800 pb-2">
-                    <h3 className="text-lg font-medium text-gray-200">Network Status</h3>
-                    <p className="text-sm text-gray-400">Current network and connection information</p>
+                    <h3 className="text-lg font-medium text-gray-200">Network</h3>
+                    <p className="text-sm text-gray-400">Network and connection settings</p>
                   </div>
-                  <div className="bg-gray-800 bg-opacity-50 rounded-lg p-4 space-y-3">
+                  <div className="bg-gray-800 bg-opacity-50 rounded-lg p-4 space-y-4">
                     <div className="flex justify-between items-center">
                       <span className="text-gray-400">Network</span>
                       <span className="text-gray-200">Polygon Amoy</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-400">Taco Domain</span>
-                      <span className="text-gray-200">Testnet</span>
+                      <div className="w-32">
+                        <TacoDomainSelector onDomainChange={handleDomainChange} currentDomain={currentDomain} />
+                      </div>
                     </div>
-                  </div>
-                </div>
-
-                {/* Additional Settings */}
-                <div className="space-y-4">
-                  <div className="border-b border-gray-800 pb-2">
-                    <h3 className="text-lg font-medium text-gray-200">Additional Settings</h3>
-                    <p className="text-sm text-gray-400">Other configuration options</p>
-                  </div>
-                  <div className="bg-gray-800 bg-opacity-50 rounded-lg p-4 space-y-3">
-                    {/* Add any additional settings here */}
                   </div>
                 </div>
               </div>

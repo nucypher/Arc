@@ -739,12 +739,16 @@ const ChatInterfaceInner: React.FC = () => {
             onRetryDecryption={handleRetryDecryption}
             isSettingsOpen={isSettingsOpen}
             onCloseSettings={() => setIsSettingsOpen(false)}
+            onNicknameChange={handleNicknameChange}
+            onSaveNickname={saveNickname}
+            isEditingNickname={isEditingNickname}
+            setIsEditingNickname={setIsEditingNickname}
             settingsContent={
-              <>
-                <TacoConditionBuilder onConditionChange={handleConditionChange} />
-                <TacoDomainSelector onDomainChange={handleDomainChange} />
-              </>
+              <TacoConditionBuilder onConditionChange={handleConditionChange} />
             }
+            handleConditionChange={handleConditionChange}
+            handleDomainChange={handleDomainChange}
+            currentDomain={currentDomain}
           />
         </div>
       </div>

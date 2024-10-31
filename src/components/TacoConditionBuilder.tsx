@@ -3,6 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { conditions } from '@nucypher/taco';
 
+interface TacoConditionBuilderProps {
+  onConditionChange: (condition: any) => void;
+}
+
 export const chainIdMapping: { [key: string]: number } = {
   '137': 137,    // Polygon Mainnet
   '80001': 80001, // Mumbai Testnet
@@ -11,218 +15,178 @@ export const chainIdMapping: { [key: string]: number } = {
   '11155111': 11155111 // Sepolia Testnet
 };
 
-interface TacoConditionBuilderProps {
-  onConditionChange: (condition: any) => void;
-}
-
 const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onConditionChange }) => {
   const [conditionType, setConditionType] = useState('time');
-  const [chain, setChain] = useState('11155111');
-  const [timestamp, setTimestamp] = useState('');
-  const [amount, setAmount] = useState('');
+  const [timestamp, setTimestamp] = useState(() => {
+    // Initialize with current timestamp
+    const now = Math.floor(Date.now() / 1000);
+    return now.toString();
+  });
+  const [chain, setChain] = useState('80002'); // Default to Polygon Amoy
   const [contractAddress, setContractAddress] = useState('');
   const [tokenId, setTokenId] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [balance, setBalance] = useState('');
 
-  const timePresets = [
-    { label: 'now', value: 0 },
-    { label: '1m', value: 60 },
-    { label: '5m', value: 5 * 60 },
-    { label: '15m', value: 15 * 60 },
-    { label: '1h', value: 60 * 60 },
-    { label: '1d', value: 24 * 60 * 60 },
-  ];
-
+  // Call updateCondition on mount with initial timestamp
   useEffect(() => {
-    // Set the default timestamp to "Now" when the component mounts
-    handleTimePresetClick(0);
-  }, []);
+    updateCondition('time', timestamp);
+  }, []); // Empty dependency array means this runs once on mount
 
-  const handleTimePresetClick = (seconds: number) => {
-    const newTimestamp = Math.floor(Date.now() / 1000) + seconds;
-    setTimestamp(newTimestamp.toString());
-    validateAndBuildCondition(newTimestamp.toString());
+  const handleTimePresetClick = (minutes: number) => {
+    const futureTime = Math.floor(Date.now() / 1000) + minutes * 60;
+    setTimestamp(futureTime.toString());
+    updateCondition('time', futureTime.toString());
   };
 
-  const validateAndBuildCondition = (timestampValue: string = timestamp) => {
-    setError(null);
-    setSuccess(null);
-
+  const updateCondition = (type: string, value: string) => {
     let condition;
-    try {
-      const mappedChainId = chainIdMapping[chain];
-      if (!mappedChainId) {
-        throw new Error('Unsupported chain ID');
-      }
-
-      switch (conditionType) {
-        case 'time':
-          condition = new conditions.base.time.TimeCondition({
-            chain: mappedChainId,
-            returnValueTest: {
-              comparator: '>=',
-              value: parseInt(timestampValue),
-            },
-          });
-          break;
-        case 'ether':
-          condition = new conditions.base.evm.EvmCondition({
-            method: 'eth_getBalance',
-            parameters: [':userAddress'],
-            chain: mappedChainId,
-            returnValueTest: {
-              comparator: '>=',
-              value: amount,
-            },
-          });
-          break;
-        case 'erc20':
-          condition = new conditions.base.erc20.ERC20BalanceCondition({
-            chain: mappedChainId,
-            contractAddress,
-            returnValueTest: {
-              comparator: '>=',
-              value: amount,
-            },
-          });
-          break;
-        case 'erc721':
-          condition = new conditions.base.erc721.ERC721OwnershipCondition({
-            chain: mappedChainId,
-            contractAddress,
-            returnValueTest: {
-              comparator: '==',
-              value: tokenId,
-            },
-          });
-          break;
-        case 'erc1155':
-          condition = new conditions.base.erc1155.ERC1155BalanceCondition({
-            chain: mappedChainId,
-            contractAddress,
-            tokenId,
-            returnValueTest: {
-              comparator: '>=',
-              value: amount,
-            },
-          });
-          break;
-      }
-      onConditionChange(condition);
-      setSuccess('Condition generated successfully!');
-      
-      console.log('Full condition object:', condition);
-    } catch (error) {
-      console.error('Error creating condition:', error);
-      setError('Failed to create condition. Please check your inputs.');
+    switch (type) {
+      case 'time':
+        condition = new conditions.base.time.TimeCondition({
+          returnValueTest: {
+            comparator: '>=',
+            value: parseInt(value),
+          },
+          method: "blocktime",
+          chain: chainIdMapping[chain],
+        });
+        break;
+      case 'erc20':
+        condition = new conditions.base.erc20.ERC20BalanceCondition({
+          contractAddress: value,
+          chain: chainIdMapping[chain],
+          returnValueTest: {
+            comparator: '>=',
+            value: parseInt(balance) || 1,
+          },
+        });
+        break;
+      case 'erc721':
+        condition = new conditions.base.erc721.ERC721OwnershipCondition({
+          contractAddress: value,
+          chain: chainIdMapping[chain],
+          returnValueTest: {
+            comparator: '==',
+            value: true,
+          },
+          parameters: [tokenId],
+        });
+        break;
     }
+    if (condition) onConditionChange(condition);
   };
 
   return (
-    <div className="bg-black text-white p-4 rounded-lg shadow-md">
-      <h2 className="text-lg font-semibold mb-4">Taco Condition Builder</h2>
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        <div className="relative">
-          <select
-            value={conditionType}
-            onChange={(e) => setConditionType(e.target.value)}
-            className="w-full p-2 bg-gray-800 border border-gray-700 rounded appearance-none focus:outline-none focus:ring-2 focus:ring-gray-600 text-white"
-          >
-            <option value="time">Time</option>
-            <option value="ether">Ether Balance</option>
-            <option value="erc20">ERC20 Balance</option>
-            <option value="erc721">ERC721 Ownership</option>
-            <option value="erc1155">ERC1155 Balance</option>
-          </select>
-          <label className="absolute text-xs text-gray-400 -top-2 left-2 bg-black px-1">Condition Type</label>
+    <div className="space-y-6">
+      {/* Time-based Conditions */}
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <label className="text-sm font-medium text-gray-300">Time Lock</label>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => handleTimePresetClick(5)}
+              className="px-3 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
+            >
+              5m
+            </button>
+            <button
+              onClick={() => handleTimePresetClick(15)}
+              className="px-3 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
+            >
+              15m
+            </button>
+            <button
+              onClick={() => handleTimePresetClick(60)}
+              className="px-3 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
+            >
+              1h
+            </button>
+          </div>
         </div>
-        <div className="relative">
-          <select
-            value={chain}
-            onChange={(e) => setChain(e.target.value)}
-            className="w-full p-2 bg-gray-800 border border-gray-700 rounded appearance-none focus:outline-none focus:ring-2 focus:ring-gray-600 text-white"
-          >
-            <option value="11155111">Sepolia Testnet (11155111)</option>
-            <option value="1">Ethereum Mainnet (1)</option>
-            <option value="137">Polygon Mainnet (137)</option>
-            <option value="80001">Mumbai Testnet (80001)</option>
-            <option value="80002">Amoy Testnet (80002)</option>
-          </select>
-          <label className="absolute text-xs text-gray-400 -top-2 left-2 bg-black px-1">Chain</label>
+        <input
+          type="datetime-local"
+          value={timestamp ? new Date(parseInt(timestamp) * 1000).toISOString().slice(0, 16) : ''}
+          onChange={(e) => {
+            const time = Math.floor(new Date(e.target.value).getTime() / 1000);
+            setTimestamp(time.toString());
+            updateCondition('time', time.toString());
+          }}
+          className="w-full px-3 py-2 bg-gray-700 text-gray-200 rounded border border-gray-600 focus:outline-none focus:border-blue-500"
+        />
+      </div>
+
+      {/* Token Requirements */}
+      <div className="space-y-4">
+        <label className="text-sm font-medium text-gray-300">ERC20 Token</label>
+        <div className="space-y-2">
+          <input
+            type="text"
+            placeholder="Contract Address"
+            value={contractAddress}
+            onChange={(e) => {
+              setContractAddress(e.target.value);
+              updateCondition('erc20', e.target.value);
+            }}
+            className="w-full px-3 py-2 bg-gray-700 text-gray-200 rounded border border-gray-600 focus:outline-none focus:border-blue-500"
+          />
+          <input
+            type="number"
+            placeholder="Minimum Balance"
+            value={balance}
+            onChange={(e) => {
+              setBalance(e.target.value);
+              updateCondition('erc20', contractAddress);
+            }}
+            className="w-full px-3 py-2 bg-gray-700 text-gray-200 rounded border border-gray-600 focus:outline-none focus:border-blue-500"
+          />
         </div>
       </div>
-      {conditionType === 'time' && (
-        <>
-          <div className="relative mb-4">
-            <input
-              type="number"
-              value={timestamp}
-              onChange={(e) => setTimestamp(e.target.value)}
-              className="w-full p-2 bg-gray-800 border border-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-gray-600 text-white"
-              placeholder=" "
-            />
-            <label className="absolute text-xs text-gray-400 -top-2 left-2 bg-black px-1">Timestamp</label>
-          </div>
-          <div className="flex mb-4 overflow-x-auto">
-            <div className="flex space-x-2">
-              {timePresets.map((preset, index) => (
-                <button
-                  key={index}
-                  onClick={() => handleTimePresetClick(preset.value)}
-                  className="flex-shrink-0 w-12 h-12 bg-gray-700 text-white text-xs rounded-lg hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-600 flex items-center justify-center"
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-      {(conditionType === 'ether' || conditionType === 'erc20' || conditionType === 'erc1155') && (
-        <div className="relative mb-4">
+
+      {/* NFT Requirements */}
+      <div className="space-y-4">
+        <label className="text-sm font-medium text-gray-300">NFT (ERC721)</label>
+        <div className="space-y-2">
           <input
             type="text"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="w-full p-2 bg-gray-800 border border-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-gray-600 text-white"
-            placeholder=" "
-          />
-          <label className="absolute text-xs text-gray-400 -top-2 left-2 bg-black px-1">Amount</label>
-        </div>
-      )}
-      {(conditionType === 'erc20' || conditionType === 'erc721' || conditionType === 'erc1155') && (
-        <div className="relative mb-4">
-          <input
-            type="text"
+            placeholder="NFT Contract Address"
             value={contractAddress}
-            onChange={(e) => setContractAddress(e.target.value)}
-            className="w-full p-2 bg-gray-800 border border-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-gray-600 text-white"
-            placeholder=" "
+            onChange={(e) => {
+              setContractAddress(e.target.value);
+              updateCondition('erc721', e.target.value);
+            }}
+            className="w-full px-3 py-2 bg-gray-700 text-gray-200 rounded border border-gray-600 focus:outline-none focus:border-blue-500"
           />
-          <label className="absolute text-xs text-gray-400 -top-2 left-2 bg-black px-1">Contract Address</label>
-        </div>
-      )}
-      {(conditionType === 'erc721' || conditionType === 'erc1155') && (
-        <div className="relative mb-4">
           <input
             type="text"
+            placeholder="Token ID"
             value={tokenId}
-            onChange={(e) => setTokenId(e.target.value)}
-            className="w-full p-2 bg-gray-800 border border-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-gray-600 text-white"
-            placeholder=" "
+            onChange={(e) => {
+              setTokenId(e.target.value);
+              updateCondition('erc721', contractAddress);
+            }}
+            className="w-full px-3 py-2 bg-gray-700 text-gray-200 rounded border border-gray-600 focus:outline-none focus:border-blue-500"
           />
-          <label className="absolute text-xs text-gray-400 -top-2 left-2 bg-black px-1">Token ID</label>
         </div>
-      )}
-      <button
-        onClick={() => validateAndBuildCondition()}
-        className="w-full p-2 bg-white text-black rounded hover:bg-gray-200 transition-colors"
-      >
-        Generate Condition
-      </button>
-      {error && <p className="mt-2 text-red-400 text-sm">{error}</p>}
-      {success && <p className="mt-2 text-green-400 text-sm">{success}</p>}
+      </div>
+
+      {/* Network Selection */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-gray-300">Network</label>
+        <select
+          value={chain}
+          onChange={(e) => {
+            setChain(e.target.value);
+            updateCondition(conditionType, timestamp || contractAddress);
+          }}
+          className="w-full px-3 py-2 bg-gray-700 text-gray-200 rounded border border-gray-600 focus:outline-none focus:border-blue-500"
+        >
+          <option value="80002">Polygon Amoy</option>
+          <option value="80001">Polygon Mumbai</option>
+          <option value="137">Polygon Mainnet</option>
+          <option value="11155111">Sepolia</option>
+          <option value="1">Ethereum Mainnet</option>
+        </select>
+      </div>
     </div>
   );
 };
