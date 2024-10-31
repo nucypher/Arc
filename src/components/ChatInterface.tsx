@@ -57,6 +57,7 @@ const ChatInterfaceInner: React.FC = () => {
   const [wakuNode, setWakuNode] = useState<any>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [sentMessageIds, setSentMessageIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     const init = async () => {
@@ -146,7 +147,7 @@ const ChatInterfaceInner: React.FC = () => {
         await subscribeToMessages(currentTopic.name, async (decodedMessage: any) => {
           console.log('Received message:', decodedMessage);
           // Check if the message is from the current user
-          if (decodedMessage.sender === account) {
+          if (decodedMessage.sender === account && sentMessageIds.has(decodedMessage.timestamp)) {
             console.log('Ignoring message from self');
             return; // Skip processing messages from self
           }
@@ -158,12 +159,12 @@ const ChatInterfaceInner: React.FC = () => {
             console.log('Message decrypted successfully:', decryptedContent);
 
             const newMessage: Message = {
-              id: Date.now(),
+              id: decodedMessage.timestamp,
               sender: decodedMessage.sender,
               senderNickname: decodedMessage.nickname,
               content: decryptedContent,
               timestamp: decodedMessage.timestamp,
-              encrypted: false, // Mark as decrypted for display purposes
+              encrypted: false,
             };
             setMessages(prevMessages => {
               const updatedMessages = [...prevMessages, newMessage];
@@ -178,7 +179,7 @@ const ChatInterfaceInner: React.FC = () => {
         console.error('Error setting up message subscription:', error);
       }
     }
-  }, [wakuNode, currentTopic, web3Provider, currentDomain, account]);
+  }, [wakuNode, currentTopic, web3Provider, currentDomain, account, sentMessageIds]);
 
   useEffect(() => {
     if (wakuNode && currentTopic) {
@@ -264,19 +265,21 @@ const ChatInterfaceInner: React.FC = () => {
         await sendWakuMessage(currentTopic.name, account, messageKitBytes, nickname);
         console.log('Encrypted message sent via Waku');
         
+        const newMessageId = Date.now();
         const newMessage: Message = {
-          id: Date.now(),
+          id: newMessageId,
           sender: account,
           senderNickname: nickname,
-          content: inputText.trim(), // Store the original input as content
-          timestamp: Date.now(),
-          encrypted: true, // Mark as encrypted
-          decrypted: inputText.trim(), // Also store the original input as decrypted content
+          content: inputText.trim(),
+          timestamp: newMessageId,
+          encrypted: true,
+          decrypted: inputText.trim(),
         };
         setMessages(prevMessages => {
           const updatedMessages = [...prevMessages, newMessage];
           return updatedMessages.sort((a, b) => a.timestamp - b.timestamp);
         });
+        setSentMessageIds(prev => new Set(prev).add(newMessageId));
         setInputText('');
       } else {
         console.warn('Waku is not initialized. Message encrypted but not sent.');
