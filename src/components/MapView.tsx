@@ -727,11 +727,11 @@ const MapView: React.FC<MapViewProps> = ({
             <Marker 
               key={index} 
               position={marker.position}
-              icon={createBlockieMarker(marker.sender)}
+              icon={createBlockieMarker(marker.sender === account ? account : marker.sender)}
             >
               <Popup className="dark-theme-popup">
                 <div className="flex items-center">
-                  <Blockie address={marker.sender} size={24} className="mr-2" />
+                  <Blockie address={marker.sender === account ? account : marker.sender} size={24} className="mr-2" />
                   <strong className="text-yellow-400">
                     {marker.sender === account ? 'You' : marker.sender}
                   </strong>
