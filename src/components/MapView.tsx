@@ -716,19 +716,72 @@ const MapView: React.FC<MapViewProps> = ({
       {isSettingsOpen && (
         <div className="absolute inset-0 bg-black bg-opacity-50 z-[2000] flex justify-end">
           <div className="w-96 bg-gray-900 h-full overflow-y-auto border-l border-gray-800">
-            <div className="p-4">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold text-gray-200">Settings</h2>
+            <div className="p-6">
+              {/* Header */}
+              <div className="flex justify-between items-center mb-8">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-200">Settings</h2>
+                  <p className="text-sm text-gray-400 mt-1">Configure your encryption and network settings</p>
+                </div>
                 <button
                   onClick={onCloseSettings}
-                  className="text-gray-400 hover:text-gray-300"
+                  className="text-gray-400 hover:text-gray-300 transition-colors"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
-              {settingsContent}
+
+              {/* Settings Sections */}
+              <div className="space-y-8">
+                {/* Encryption Settings */}
+                <div className="space-y-4">
+                  <div className="border-b border-gray-800 pb-2">
+                    <h3 className="text-lg font-medium text-gray-200">Encryption</h3>
+                    <p className="text-sm text-gray-400">Configure message encryption conditions</p>
+                  </div>
+                  <div className="bg-gray-800 bg-opacity-50 rounded-lg p-4">
+                    {settingsContent}
+                  </div>
+                </div>
+
+                {/* Network Info */}
+                <div className="space-y-4">
+                  <div className="border-b border-gray-800 pb-2">
+                    <h3 className="text-lg font-medium text-gray-200">Network Status</h3>
+                    <p className="text-sm text-gray-400">Current network and connection information</p>
+                  </div>
+                  <div className="bg-gray-800 bg-opacity-50 rounded-lg p-4 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Network</span>
+                      <span className="text-gray-200">Polygon Amoy</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Taco Domain</span>
+                      <span className="text-gray-200">Testnet</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional Settings */}
+                <div className="space-y-4">
+                  <div className="border-b border-gray-800 pb-2">
+                    <h3 className="text-lg font-medium text-gray-200">Additional Settings</h3>
+                    <p className="text-sm text-gray-400">Other configuration options</p>
+                  </div>
+                  <div className="bg-gray-800 bg-opacity-50 rounded-lg p-4 space-y-3">
+                    {/* Add any additional settings here */}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="mt-8 pt-4 border-t border-gray-800">
+                <p className="text-sm text-gray-400 text-center">
+                  Settings are automatically saved
+                </p>
+              </div>
             </div>
           </div>
         </div>
