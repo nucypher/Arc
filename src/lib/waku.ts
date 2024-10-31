@@ -115,7 +115,7 @@ export const sendLocationUpdate = async (
 ) => {
   if (!wakuNode) throw new Error('Waku node not initialized');
 
-  // Create location data object
+  // Create location data object (sensitive data that needs encryption)
   const locationData = {
     latitude,
     longitude,
@@ -136,7 +136,7 @@ export const sendLocationUpdate = async (
     );
     const encryptedContent = messageKit.toBytes();
 
-    // Create location update message
+    // Create location update message with encrypted content
     const locationUpdate = LocationUpdate.create({
       timestamp: Date.now(),
       sender,
@@ -145,15 +145,12 @@ export const sendLocationUpdate = async (
       condition: JSON.stringify(condition)
     });
 
-    console.log('[Location] Encoding location update');
+    console.log('[Location] Sending encrypted location update');
     const serializedMessage = LocationUpdate.encode(locationUpdate).finish();
-    console.log('[Location] Location update encoded, payload size:', serializedMessage.length);
-
-    console.log('[Location] Sending encrypted location update to Waku');
-    await wakuNode.lightPush.send(createEncoder(locationEncoder), {
+    await wakuNode.lightPush.send(locationEncoder, {
       payload: serializedMessage,
     });
-    console.log('[Location] Encrypted location update sent successfully');
+    console.log('[Location] Encrypted location update sent');
   } catch (error) {
     console.error('[Location] Error sending location update:', error);
     throw error;
@@ -166,54 +163,51 @@ export const subscribeToLocationUpdates = async (
   currentDomain: any
 ) => {
   if (!wakuNode) {
-    console.error('[Location] Waku node not initialized for location updates');
+    console.error('[Location] Waku node not initialized');
     throw new Error('Waku node not initialized');
   }
 
-  console.log(`[Location] Attempting to subscribe to location updates on topic: ${locationContentTopic}`);
-  
   try {
     const subscription = await wakuNode.filter.subscribe([createDecoder(locationContentTopic)], async (wakuMessage: any) => {
-      if (!wakuMessage.payload) {
-        console.log('[Location] Received empty payload, skipping');
-        return;
-      }
+      if (!wakuMessage.payload) return;
 
       try {
-        console.log('[Location] Received raw location update');
+        // Decode the protobuf message
         const decodedMessage = LocationUpdate.decode(wakuMessage.payload);
         
-        // Check if web3Provider is available before attempting decryption
         if (!web3Provider) {
-          console.log('[Location] Web3Provider not available, skipping decryption');
+          console.error('[Location] Web3Provider not available for decryption');
           return;
         }
 
         try {
-          // Decrypt the location data using the imported decryptMessage function
+          // Decrypt the location data
           const messageKit = ThresholdMessageKit.fromBytes(decodedMessage.content);
           const decrypted = await decryptMessage(messageKit, web3Provider, currentDomain);
+          
+          // Parse the decrypted data
           const locationData = JSON.parse(new TextDecoder().decode(decrypted));
 
+          // Create the location update with decrypted data
           const update: LocationUpdate = {
             sender: decodedMessage.sender,
             nickname: decodedMessage.nickname,
             ...locationData
           };
 
-          console.log('[Location] Decrypted location update:', update);
+          // Only log that we received an update, not its contents
+          console.log('[Location] Successfully decrypted location update from:', update.sender);
+          
+          // Pass the decrypted update to the callback
           callback(update);
         } catch (decryptError) {
-          console.error('[Location] Failed to decrypt location update:', decryptError);
-          // Don't throw here, just log and continue
+          console.error('[Location] Failed to decrypt location update');
         }
       } catch (error) {
-        console.error('[Location] Error processing location update:', error);
-        // Don't throw here, just log and continue
+        console.error('[Location] Error processing location update');
       }
     });
 
-    console.log(`[Location] Successfully subscribed to location updates topic: ${locationContentTopic}`);
     return subscription;
   } catch (error) {
     console.error('[Location] Error setting up location subscription:', error);

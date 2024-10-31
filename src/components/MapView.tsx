@@ -9,6 +9,7 @@ import { FaMapMarkerAlt } from 'react-icons/fa';
 import ChatBubble from './ChatBubble';
 import TacoConditionBuilder from './TacoConditionBuilder';
 import TacoDomainSelector from './TacoDomainSelector';
+import * as ethers from 'ethers';
 
 // Fix for default marker icons in react-leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -222,15 +223,15 @@ const DARK_MAP_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copy
 const createBlockieMarker = (address: string, isUser: boolean = false) => {
   let blockieUrl;
   try {
-    // Check if address is valid
-    if (!address || address === 'Anonymous' || address.length < 10) {
-      // Use a default image or generate a random blockie
-      blockieUrl = makeBlockie('0x0000000000000000000000000000000000000000');
-    } else {
+    // Check if address is valid Ethereum address
+    if (ethers.utils.isAddress(address)) {
       blockieUrl = makeBlockie(address);
+    } else {
+      // Use a default image for invalid addresses
+      blockieUrl = makeBlockie('0x0000000000000000000000000000000000000000');
     }
   } catch (error) {
-    console.error('Error creating blockie:', error);
+    console.error('Error creating blockie for address:', address, error);
     // Fallback to default blockie
     blockieUrl = makeBlockie('0x0000000000000000000000000000000000000000');
   }
@@ -324,7 +325,6 @@ const SaveIndicator: React.FC<SaveIndicatorProps> = ({ isSaving, showSuccess }) 
 
 const MapView: React.FC<MapViewProps> = ({
   messages,
-  onShareLocation,
   account,
   nickname,
   liveLocations,
@@ -381,15 +381,24 @@ const MapView: React.FC<MapViewProps> = ({
         return false;
       }
 
+      // Only trigger the permission prompt if needed
       if (permission.state === 'prompt') {
         console.log('Triggering permission prompt...');
-        // Request position to trigger the permission prompt
-        await new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 5000,
-            maximumAge: 0
-          });
+        // Just get position without sending an update
+        await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              // Just store the position without sending an update
+              setUserPosition([position.coords.latitude, position.coords.longitude]);
+              resolve(position);
+            },
+            reject,
+            {
+              enableHighAccuracy: true,
+              timeout: 20000,
+              maximumAge: 5000
+            }
+          );
         });
         console.log('Permission prompt handled');
       }
@@ -406,6 +415,7 @@ const MapView: React.FC<MapViewProps> = ({
     if ("geolocation" in navigator) {
       console.log('Starting location watch with options:', options);
       
+      // Don't request permission here, just start watching
       const watchId = navigator.geolocation.watchPosition(
         async (position) => {
           console.log('Position update received:', {
@@ -433,7 +443,6 @@ const MapView: React.FC<MapViewProps> = ({
             );
           } catch (error) {
             console.error('Failed to send location update:', error);
-            // Don't stop watching, just log the error
           }
         },
         (error) => {
@@ -712,9 +721,13 @@ const MapView: React.FC<MapViewProps> = ({
               <Popup className="dark-theme-popup">
                 <div className="flex items-center">
                   <Blockie address={marker.sender} size={24} className="mr-2" />
-                  <strong className="text-yellow-400">{marker.sender}</strong>
+                  <strong className="text-yellow-400">
+                    {marker.sender === account ? 'You' : marker.sender}
+                  </strong>
                 </div>
-                <small className="text-gray-400 block mt-1">{new Date(marker.timestamp).toLocaleString()}</small>
+                <small className="text-gray-400 block mt-1">
+                  {new Date(marker.timestamp).toLocaleString()}
+                </small>
                 {marker.isLive && (
                   <div className="text-green-400 text-xs mt-1 flex items-center">
                     <div className="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse"></div>
@@ -752,14 +765,6 @@ const MapView: React.FC<MapViewProps> = ({
             className="flex-grow px-4 py-2 bg-gray-800 text-white border border-gray-700 rounded-l focus:outline-none focus:ring-2 focus:ring-gray-600"
             placeholder="Type your message..."
           />
-          <button
-            type="button"
-            onClick={startSharingLocation}
-            className="px-4 py-2 bg-gray-700 text-white hover:bg-gray-600 transition-colors duration-200 flex items-center justify-center"
-            title="Share location"
-          >
-            <FaMapMarkerAlt size={20} />
-          </button>
           <button 
             type="submit" 
             className="px-4 py-2 bg-blue-600 text-white rounded-r hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center"
