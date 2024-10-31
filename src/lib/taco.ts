@@ -69,7 +69,7 @@ export const decryptMessage = async (
       domain,
       messageKit
     );
-
+    console.log('Message decrypted successfully');
     return decrypted;
   } catch (error) {
     console.error('Detailed error in decryptMessage:', error);

@@ -1,7 +1,7 @@
 import { createLightNode, waitForRemotePeer, Protocols, createEncoder, createDecoder } from '@waku/sdk';
 import protobuf from 'protobufjs';
 import { ThresholdMessageKit } from '@nucypher/taco';
-import { encryptMessage } from './taco';
+import { encryptMessage, decryptMessage } from './taco';
 
 export const defaultContentTopic = '/taco-chat/1/messages/proto';
 export const locationContentTopic = '/taco-chat/1/messages/data';
@@ -182,21 +182,33 @@ export const subscribeToLocationUpdates = async (
         console.log('[Location] Received raw location update');
         const decodedMessage = LocationUpdate.decode(wakuMessage.payload);
         
-        // Decrypt the location data
-        const messageKit = ThresholdMessageKit.fromBytes(decodedMessage.content);
-        const decrypted = await decryptMessage(messageKit, web3Provider, currentDomain);
-        const locationData = JSON.parse(new TextDecoder().decode(decrypted));
+        // Check if web3Provider is available before attempting decryption
+        if (!web3Provider) {
+          console.log('[Location] Web3Provider not available, skipping decryption');
+          return;
+        }
 
-        const update: LocationUpdate = {
-          sender: decodedMessage.sender,
-          nickname: decodedMessage.nickname,
-          ...locationData
-        };
+        try {
+          // Decrypt the location data using the imported decryptMessage function
+          const messageKit = ThresholdMessageKit.fromBytes(decodedMessage.content);
+          const decrypted = await decryptMessage(messageKit, web3Provider, currentDomain);
+          const locationData = JSON.parse(new TextDecoder().decode(decrypted));
 
-        console.log('[Location] Decrypted location update:', update);
-        callback(update);
+          const update: LocationUpdate = {
+            sender: decodedMessage.sender,
+            nickname: decodedMessage.nickname,
+            ...locationData
+          };
+
+          console.log('[Location] Decrypted location update:', update);
+          callback(update);
+        } catch (decryptError) {
+          console.error('[Location] Failed to decrypt location update:', decryptError);
+          // Don't throw here, just log and continue
+        }
       } catch (error) {
         console.error('[Location] Error processing location update:', error);
+        // Don't throw here, just log and continue
       }
     });
 
