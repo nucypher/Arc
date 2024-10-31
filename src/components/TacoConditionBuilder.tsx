@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { conditions } from '@nucypher/taco';
 import { ethers } from 'ethers';
 
 interface TacoConditionBuilderProps {
   onConditionChange: (condition: any) => void;
+  isActive?: boolean;
 }
 
 export const chainIdMapping: { [key: string]: number } = {
@@ -30,7 +31,7 @@ const mapStyles = `
   }
 `;
 
-const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onConditionChange }) => {
+const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onConditionChange, isActive = false }) => {
   const [conditionType, setConditionType] = useState<ConditionType>('time');
   const [timestamp, setTimestamp] = useState(() => {
     // Initialize with current timestamp
@@ -43,50 +44,94 @@ const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onCondition
   const [balance, setBalance] = useState('');
   const [isValidAddress, setIsValidAddress] = useState<boolean | null>(null);
 
-  // Call updateCondition on mount with initial timestamp
-  useEffect(() => {
-    updateCondition('time', timestamp);
-  }, []); // Empty dependency array means this runs once on mount
+  // Add debounce timer ref
+  const debounceTimer = useRef<NodeJS.Timeout>();
+
+  // Wrap condition updates in debounced function
+  const debouncedUpdateCondition = useCallback((type: ConditionType, value: string) => {
+    if (!isActive) return;
+
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    debounceTimer.current = setTimeout(() => {
+      let condition;
+      switch (type) {
+        case 'time':
+          condition = new conditions.base.time.TimeCondition({
+            returnValueTest: {
+              comparator: '>=',
+              value: parseInt(value),
+            },
+            method: "blocktime",
+            chain: chainIdMapping[chain],
+          });
+          break;
+        case 'erc20':
+          condition = new conditions.predefined.erc20.ERC20Balance({
+            contractAddress: value,
+            chain: chainIdMapping[chain],
+            returnValueTest: {
+              comparator: '>=',
+              value: ethers.utils.parseEther(balance || '0').toString(),
+            },
+          });
+          break;
+        case 'erc721':
+          condition = new conditions.predefined.erc721.ERC721Ownership({
+            contractAddress: value,
+            chain: chainIdMapping[chain],
+            parameters: [tokenId],
+          });
+          break;
+      }
+      if (condition) onConditionChange(condition);
+    }, 500); // 500ms debounce
+  }, [chain, balance, tokenId, onConditionChange, isActive]);
+
+  const handleTimeChange = (newTime: string | number) => {
+    if (!isActive) return;
+    
+    const time = typeof newTime === 'string' ? parseInt(newTime) : newTime;
+    setTimestamp(time.toString());
+    
+    const condition = new conditions.base.time.TimeCondition({
+      returnValueTest: {
+        comparator: '>=',
+        value: time,
+      },
+      method: "blocktime",
+      chain: chainIdMapping[chain],
+    });
+    onConditionChange(condition);
+  };
 
   const handleTimePresetClick = (minutes: number) => {
+    if (!isActive) return;
+    
     const futureTime = Math.floor(Date.now() / 1000) + minutes * 60;
     setTimestamp(futureTime.toString());
-    updateCondition('time', futureTime.toString());
+    
+    const condition = new conditions.base.time.TimeCondition({
+      returnValueTest: {
+        comparator: '>=',
+        value: futureTime,
+      },
+      method: "blocktime",
+      chain: chainIdMapping[chain],
+    });
+    onConditionChange(condition);
   };
 
-  const updateCondition = (type: ConditionType, value: string) => {
-    let condition;
-    switch (type) {
-      case 'time':
-        condition = new conditions.base.time.TimeCondition({
-          returnValueTest: {
-            comparator: '>=',
-            value: parseInt(value),
-          },
-          method: "blocktime",
-          chain: chainIdMapping[chain],
-        });
-        break;
-      case 'erc20':
-        condition = new conditions.predefined.erc20.ERC20Balance({
-          contractAddress: value,
-          chain: chainIdMapping[chain],
-          returnValueTest: {
-            comparator: '>=',
-            value: parseInt(balance) || 1,
-          },
-        });
-        break;
-      case 'erc721':
-        condition = new conditions.predefined.erc721.ERC721Ownership({
-          contractAddress: value,
-          chain: chainIdMapping[chain],
-          parameters: [tokenId],
-        });
-        break;
-    }
-    if (condition) onConditionChange(condition);
-  };
+  // Clean up debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, []);
 
   const validateAddress = (address: string) => {
     try {
@@ -157,8 +202,7 @@ const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onCondition
             value={timestamp ? new Date(parseInt(timestamp) * 1000).toISOString().slice(0, 16) : ''}
             onChange={(e) => {
               const time = Math.floor(new Date(e.target.value).getTime() / 1000);
-              setTimestamp(time.toString());
-              updateCondition('time', time.toString());
+              handleTimeChange(time);
             }}
             className="w-full px-3 py-2 bg-gray-700 text-gray-200 rounded border border-gray-600 focus:outline-none focus:border-blue-500"
           />
@@ -179,7 +223,7 @@ const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onCondition
                   const address = e.target.value;
                   setContractAddress(address);
                   if (validateAddress(address)) {
-                    updateCondition('erc20', address);
+                    debouncedUpdateCondition('erc20', address);
                   }
                 }}
                 className={`w-full px-3 py-2 bg-gray-700 text-gray-200 rounded border ${
@@ -285,7 +329,7 @@ const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onCondition
                   const address = e.target.value;
                   setContractAddress(address);
                   if (validateAddress(address)) {
-                    updateCondition('erc721', address);
+                    debouncedUpdateCondition('erc721', address);
                   }
                 }}
                 className={`w-full px-3 py-2 bg-gray-700 text-gray-200 rounded border ${
@@ -317,7 +361,7 @@ const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onCondition
               onChange={(e) => {
                 setTokenId(e.target.value);
                 if (isValidAddress) {
-                  updateCondition('erc721', contractAddress);
+                  debouncedUpdateCondition('erc721', contractAddress);
                 }
               }}
               className="w-full px-3 py-2 bg-gray-700 text-gray-200 rounded border border-gray-600 focus:outline-none focus:border-blue-500"
@@ -333,7 +377,7 @@ const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onCondition
           value={chain}
           onChange={(e) => {
             setChain(e.target.value);
-            updateCondition(conditionType, timestamp || contractAddress);
+            debouncedUpdateCondition(conditionType, timestamp || contractAddress);
           }}
           className="w-full px-3 py-2 bg-gray-700 text-gray-200 rounded border border-gray-600 focus:outline-none focus:border-blue-500"
         >

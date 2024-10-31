@@ -45,7 +45,6 @@ export const encryptMessage = async (
       signer
     );
 
-    console.log('Message encrypted successfully');
     return messageKit;
   } catch (error) {
     console.error('Error in encryptMessage:', error);

@@ -1,42 +1,35 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ethers } from 'ethers';
 import { initializeTaco, encryptMessage, decryptMessage } from '../lib/taco';
 import { createNode, subscribeToMessages, sendWakuMessage, defaultContentTopic, getWakuNodeStatus, subscribeToLocationUpdates } from '../lib/waku';
 import { ThresholdMessageKit, domains, conditions } from '@nucypher/taco';
 import WalletConnect from './WalletConnect';
 import TacoConditionBuilder from './TacoConditionBuilder';
-import TacoDomainSelector from './TacoDomainSelector';
 import WakuStatus from './WakuStatus';
 import TopicSidebar from './TopicSidebar';
-import ChatBubble from './ChatBubble';
-import { FaExclamationCircle, FaMapMarkerAlt } from 'react-icons/fa'; // Change to circle icon
+import { FaExclamationCircle } from 'react-icons/fa';
 import { switchToPolygonAmoy } from '../utils/ethereum';
-import MapView from './MapView';
+import MapView, { LocationUpdate } from './MapView';
 import { chainIdMapping } from './TacoConditionBuilder';
+import AboutPopup from './AboutPopup';
 
-interface Message {
+interface ChatMessage {
   id: number;
   sender: string;
   senderNickname: string;
   content: string;
   timestamp: number;
   encrypted: boolean;
-  encryptedContent?: Uint8Array; // Add this line to store the original encrypted content
+  encryptedContent?: Uint8Array;
   decrypted?: string;
   condition?: string;
   delivered?: boolean;
 }
 
-interface Topic {
-  name: string;
-  lastMessage?: string;
-  lastMessageTime?: number;
-}
-
 const ChatInterfaceInner: React.FC = () => {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [web3Provider, setWeb3Provider] = useState<ethers.providers.Web3Provider | null>(null);
   const [account, setAccount] = useState<string | null>(null);
@@ -60,9 +53,6 @@ const ChatInterfaceInner: React.FC = () => {
   });
   const [conditionDescription, setConditionDescription] = useState<string | null>(null);
   const [currentDomain, setCurrentDomain] = useState<domains>(domains.TESTNET);
-  const [error, setError] = useState<string | null>(null);
-  const [isTacoInitialized, setIsTacoInitialized] = useState(false);
-  const [isConditionBuilderVisible, setIsConditionBuilderVisible] = useState(true);
   const [nickname, setNickname] = useState<string>(() => {
     return localStorage.getItem('userNickname') || 'Anonymous';
   });
@@ -75,8 +65,6 @@ const ChatInterfaceInner: React.FC = () => {
   const [initializationError, setInitializationError] = useState<string | null>(null);
   const [peerCount, setPeerCount] = useState(0);
   const [ritualId, setRitualId] = useState<string>('6'); // Default to Testnet ritual ID
-  const [isWakuReady, setIsWakuReady] = useState(false);
-  const [isTacoReady, setIsTacoReady] = useState(false);
   const [wakuNode, setWakuNode] = useState<any>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
@@ -85,20 +73,32 @@ const ChatInterfaceInner: React.FC = () => {
   const [decryptingMessages, setDecryptingMessages] = useState<Set<number>>(new Set());
   const [ethereumNetwork, setEthereumNetwork] = useState<string>('Unknown');
   const [isCorrectNetwork, setIsCorrectNetwork] = useState(false);
-  const [currentView, setCurrentView] = useState<'chat' | 'map'>('chat');
   const [liveLocations, setLiveLocations] = useState<Map<string, LocationUpdate>>(new Map());
   const [activeUsers, setActiveUsers] = useState<Map<string, { nickname: string; lastSeen: number; address: string }>>(new Map());
   const [centerOnUserId, setCenterOnUserId] = useState<string | undefined>();
 
+  // Add a ref to track subscription cleanup
+  const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
+
+  // Add a ref to track if we're currently setting up subscriptions
+  const isSettingUpSubscription = useRef(false);
+
+  // Add initialization tracking refs
+  const isInitializingTaco = useRef(false);
+  const isInitializingWaku = useRef(false);
+
+  // Add this near the top with other refs
+  const hasAttemptedNetworkSwitch = useRef(false);
+
   useEffect(() => {
     const init = async () => {
-      setIsInitializing(true);
-      try {
-        await initializeTaco();
-        console.log('TACo initialized successfully');
-      } catch (error) {
-        console.error('Failed to initialize TACo:', error);
+      // Guard against multiple initializations
+      if (isInitializingWaku.current) {
+        return;
       }
+
+      setIsInitializing(true);
+      isInitializingWaku.current = true;
 
       try {
         const node = await createNode();
@@ -106,64 +106,212 @@ const ChatInterfaceInner: React.FC = () => {
         console.log('Waku node initialized successfully');
       } catch (error) {
         console.error('Failed to initialize Waku:', error);
+      } finally {
+        setIsInitializing(false);
+        isInitializingWaku.current = false;
       }
-
-      setIsInitializing(false);
     };
+
     init();
   }, []);
 
-  const truncateAddress = (address: string) => {
-    return `${address.slice(0, 6)}...${address.slice(-4)}`;
-  };
+  useEffect(() => {
+    const initializeChat = async () => {
+      // Guard against multiple initializations
+      if (isInitializingTaco.current) {
+        return;
+      }
 
-  const formatTimestamp = (timestamp: number) => {
-    return new Date(timestamp).toLocaleString();
-  };
+      try {
+        isInitializingTaco.current = true;
+        await initializeTaco();
+        console.log('TACo initialized successfully');
+        setInitializationError(null);
+      } catch (error) {
+        console.error('Failed to initialize TACo:', error);
+        setInitializationError(`Failed to initialize TACo: ${error.message}`);
+      } finally {
+        isInitializingTaco.current = false;
+      }
+    };
 
-  const LockIcon = () => (
-    <svg className="inline-block w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-    </svg>
-  );
+    initializeChat();
+  }, []);
 
-  const UnlockIcon = () => (
-    <svg className="inline-block w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 018 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-    </svg>
-  );
+  // Move filterMessages and setFilteredMessages up
+  const filterMessages = useCallback((messages: ChatMessage[]) => {
+    return messages.filter(message => 
+      message.sender === account || // Keep outgoing messages
+      (message.sender !== account && message.encrypted) // Keep encrypted messages from others
+    );
+  }, [account]);
 
-  // Add this helper function
-  const initializeNewProvider = async () => {
-    // Wait a bit for MetaMask to complete its network switch
+  const setFilteredMessages = useCallback((newMessages: ChatMessage[] | ((prevMessages: ChatMessage[]) => ChatMessage[])) => {
+    setMessages(prevMessages => {
+      const updatedMessages = typeof newMessages === 'function' ? newMessages(prevMessages) : newMessages;
+      return filterMessages(updatedMessages);
+    });
+  }, [filterMessages]);
+
+  // Define setupSubscription with minimal dependencies
+  const setupSubscription = useCallback(async () => {
+    // Guard against multiple simultaneous setup attempts
+    if (isSettingUpSubscription.current || isSubscribed) {
+      console.log('Subscription setup already in progress or already subscribed');
+      return;
+    }
+
+    if (!wakuNode || !currentTopic || !web3Provider) {
+      console.log('Missing dependencies for subscription:', {
+        hasWakuNode: !!wakuNode,
+        hasTopic: !!currentTopic,
+        hasWeb3Provider: !!web3Provider
+      });
+      return;
+    }
+
+    try {
+      isSettingUpSubscription.current = true;
+
+      // Clean up any existing subscription
+      if (subscriptionRef.current) {
+        console.log('Cleaning up existing subscription');
+        subscriptionRef.current.unsubscribe();
+        subscriptionRef.current = null;
+      }
+
+      // Subscribe to messages
+      const messageSubscription = await subscribeToMessages(currentTopic.name, async (decodedMessage: any) => {
+        setTimeout(async () => {
+
+          // Check if this is a message we sent
+          const isSentMessage = decodedMessage.sender === account;
+          
+          if (isSentMessage) {
+            // Only update the delivery status of the existing message
+            console.log('Received delivery confirmation for own message:', decodedMessage.timestamp);
+            setMessages(prevMessages => 
+              prevMessages.map(msg => 
+                msg.id === decodedMessage.timestamp
+                  ? { ...msg, delivered: true }
+                  : msg
+              )
+            );
+            return; // Exit early, don't process the message further
+          }
+
+          // Process messages from others only
+          if (!web3Provider) {
+            console.error('Web3Provider is not initialized. Unable to decrypt message.');
+            return;
+          }
+
+          try {
+            console.log('Attempting to decrypt message...');
+            setDecryptingMessages(prev => new Set(prev).add(decodedMessage.timestamp));
+            const messageKit = ThresholdMessageKit.fromBytes(decodedMessage.content);
+            const decrypted = await decryptMessage(messageKit, web3Provider, currentDomain);
+            const decryptedContent = new TextDecoder().decode(decrypted);
+
+            setDecryptingMessages(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(decodedMessage.timestamp);
+              return newSet;
+            });
+
+            const newMessage: ChatMessage = {
+              id: decodedMessage.timestamp,
+              sender: decodedMessage.sender,
+              senderNickname: decodedMessage.nickname,
+              content: decryptedContent,
+              timestamp: decodedMessage.timestamp,
+              encrypted: true,
+              encryptedContent: decodedMessage.content,
+              decrypted: decryptedContent,
+              condition: decodedMessage.condition,
+              delivered: false,
+            };
+            setFilteredMessages(prevMessages => {
+              const updatedMessages = [...prevMessages, newMessage];
+              return updatedMessages.sort((a, b) => a.timestamp - b.timestamp);
+            });
+          } catch (error) {
+            console.error('Error processing received message:', error);
+            setDecryptingMessages(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(decodedMessage.timestamp);
+              return newSet;
+            });
+            // Add a message bubble for undecryptable messages
+            const newMessage: ChatMessage = {
+              id: decodedMessage.timestamp,
+              sender: decodedMessage.sender,
+              senderNickname: decodedMessage.nickname,
+              content: '[Encrypted Message]',
+              timestamp: decodedMessage.timestamp,
+              encrypted: true,
+              encryptedContent: decodedMessage.content, // Store the original encrypted content
+              decrypted: undefined,
+              condition: decodedMessage.condition,
+              delivered: false,
+            };
+            setFilteredMessages(prevMessages => {
+              const updatedMessages = [...prevMessages, newMessage];
+              return updatedMessages.sort((a, b) => a.timestamp - b.timestamp);
+            });
+          }
+        }, 500);
+      });
+      
+      // Subscribe to location updates
+      const locationSubscription = await subscribeToLocationUpdates(
+        (update: LocationUpdate) => {
+          setLiveLocations(prev => {
+            const next = new Map(prev);
+            next.set(update.sender, update);
+            return next;
+          });
+        },
+        web3Provider,
+        currentDomain
+      );
+
+      // Store subscriptions for cleanup
+      subscriptionRef.current = {
+        unsubscribe: () => {
+          messageSubscription?.unsubscribe?.();
+          locationSubscription?.unsubscribe?.();
+        }
+      };
+
+      setIsSubscribed(true);
+    } catch (error) {
+      console.error('Error in subscription setup:', error);
+      setIsSubscribed(false);
+    } finally {
+      isSettingUpSubscription.current = false;
+    }
+  }, [wakuNode, currentTopic, web3Provider, currentDomain, isSubscribed, account, setFilteredMessages]);
+  // Then define initializeNewProvider
+  const initializeNewProvider = useCallback(async () => {
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     try {
-      // Create new provider
       const newProvider = new ethers.providers.Web3Provider(window.ethereum);
-      
-      // Wait for provider to be ready and get network
       await newProvider.ready;
       const network = await newProvider.getNetwork();
       
-      // Ensure we're on the right network
       if (network.chainId === 80002) {
-        // Stop any existing subscriptions
         setIsSubscribed(false);
-        
-        // Update provider and network state
         setWeb3Provider(newProvider);
         setEthereumNetwork('amoy');
         setIsCorrectNetwork(true);
 
-        // Get new signer and update account if needed
         const signer = newProvider.getSigner();
         const address = await signer.getAddress();
         setAccount(address);
 
-        // Reset subscription state to trigger resubscription with new provider
         if (wakuNode) {
-          // Re-setup subscriptions with new provider
           await setupSubscription();
         }
 
@@ -174,7 +322,7 @@ const ChatInterfaceInner: React.FC = () => {
       console.error('Error initializing new provider:', error);
       return false;
     }
-  };
+  }, [wakuNode, setupSubscription]);
 
   useEffect(() => {
     const setupWeb3 = async () => {
@@ -193,21 +341,26 @@ const ChatInterfaceInner: React.FC = () => {
           const isAmoy = network.chainId === 80002;
           setIsCorrectNetwork(isAmoy);
 
-          // If not on Amoy, prompt to switch
-          if (!isAmoy) {
+          // If not on Amoy, prompt to switch only if we haven't tried before
+          if (!isAmoy && !hasAttemptedNetworkSwitch.current) {
             console.log('Not on Polygon Amoy, prompting switch...');
+            hasAttemptedNetworkSwitch.current = true;
             const switched = await switchToPolygonAmoy();
             if (switched) {
               console.log('Successfully switched to Polygon Amoy');
               await initializeNewProvider();
             } else {
-              console.warn('Failed to switch to Polygon Amoy');
+              console.log('Network switch pending - waiting for user action');
             }
           }
 
           // Listen for network changes
           window.ethereum.on('chainChanged', async (chainId: string) => {
             console.log('Network changed to:', chainId);
+            const newChainId = parseInt(chainId, 16);
+            setIsCorrectNetwork(newChainId === 80002);
+            // Reset the switch attempt flag when network actually changes
+            hasAttemptedNetworkSwitch.current = false;
             await initializeNewProvider();
           });
 
@@ -232,145 +385,7 @@ const ChatInterfaceInner: React.FC = () => {
         });
       }
     };
-  }, []);
-
-  useEffect(() => {
-    const initializeChat = async () => {
-      try {
-        await initializeTaco();
-        console.log('TACo initialized successfully');
-        setInitializationError(null);
-      } catch (error) {
-        console.error('Failed to initialize TACo:', error);
-        setInitializationError(`Failed to initialize TACo: ${error.message}`);
-      }
-    };
-
-    initializeChat();
-  }, []);
-
-  const setupSubscription = useCallback(async () => {
-    if (wakuNode && currentTopic && !isSubscribed) {
-      console.log(`Setting up subscriptions for topic: ${currentTopic.name}`);
-      try {
-        await subscribeToMessages(currentTopic.name, async (decodedMessage: any) => {
-          setTimeout(async () => {
-            console.log('Received message:', decodedMessage);
-            console.log('Current account:', account);
-            
-            // Check if this is a message we sent
-            const isSentMessage = decodedMessage.sender === account;
-            
-            if (isSentMessage) {
-              // Only update the delivery status of the existing message
-              console.log('Received delivery confirmation for own message:', decodedMessage.timestamp);
-              setMessages(prevMessages => 
-                prevMessages.map(msg => 
-                  msg.id === decodedMessage.timestamp
-                    ? { ...msg, delivered: true }
-                    : msg
-                )
-              );
-              return; // Exit early, don't process the message further
-            }
-
-            // Process messages from others only
-            if (!web3Provider) {
-              console.error('Web3Provider is not initialized. Unable to decrypt message.');
-              return;
-            }
-
-            try {
-              console.log('Attempting to decrypt message...');
-              setDecryptingMessages(prev => new Set(prev).add(decodedMessage.timestamp));
-              const messageKit = ThresholdMessageKit.fromBytes(decodedMessage.content);
-              const decrypted = await decryptMessage(messageKit, web3Provider, currentDomain);
-              const decryptedContent = new TextDecoder().decode(decrypted);
-              console.log('Message decrypted successfully:', decryptedContent);
-
-              setDecryptingMessages(prev => {
-                const newSet = new Set(prev);
-                newSet.delete(decodedMessage.timestamp);
-                return newSet;
-              });
-
-              const newMessage: Message = {
-                id: decodedMessage.timestamp,
-                sender: decodedMessage.sender,
-                senderNickname: decodedMessage.nickname,
-                content: decryptedContent,
-                timestamp: decodedMessage.timestamp,
-                encrypted: true,
-                encryptedContent: decodedMessage.content,
-                decrypted: decryptedContent,
-                condition: decodedMessage.condition,
-                delivered: false,
-              };
-              setFilteredMessages(prevMessages => {
-                const updatedMessages = [...prevMessages, newMessage];
-                return updatedMessages.sort((a, b) => a.timestamp - b.timestamp);
-              });
-            } catch (error) {
-              console.error('Error processing received message:', error);
-              setDecryptingMessages(prev => {
-                const newSet = new Set(prev);
-                newSet.delete(decodedMessage.timestamp);
-                return newSet;
-              });
-              // Add a message bubble for undecryptable messages
-              const newMessage: Message = {
-                id: decodedMessage.timestamp,
-                sender: decodedMessage.sender,
-                senderNickname: decodedMessage.nickname,
-                content: '[Encrypted Message]',
-                timestamp: decodedMessage.timestamp,
-                encrypted: true,
-                encryptedContent: decodedMessage.content, // Store the original encrypted content
-                decrypted: undefined,
-                condition: decodedMessage.condition,
-                delivered: false,
-              };
-              setFilteredMessages(prevMessages => {
-                const updatedMessages = [...prevMessages, newMessage];
-                return updatedMessages.sort((a, b) => a.timestamp - b.timestamp);
-              });
-            }
-          }, 500);
-        });
-        
-        // Subscribe to location updates - ensure web3Provider is available
-        if (web3Provider) {
-          console.log('[Location] Setting up location subscription with web3Provider');
-          await subscribeToLocationUpdates(
-            (update: LocationUpdate) => {
-              console.log('[Location] Received location update:', update);
-              setLiveLocations(prev => {
-                const next = new Map(prev);
-                next.set(update.sender, update);
-                return next;
-              });
-            },
-            web3Provider,
-            currentDomain
-          );
-        } else {
-          console.warn('[Location] Web3Provider not available during subscription setup');
-        }
-
-        console.log('Successfully set up all subscriptions');
-        setIsSubscribed(true);
-      } catch (error) {
-        console.error('Error setting up subscriptions:', error);
-      }
-    }
-  }, [wakuNode, currentTopic, web3Provider, currentDomain, account, isSubscribed]);
-
-  // Add web3Provider to the useEffect dependencies to re-run setup when it becomes available
-  useEffect(() => {
-    if (wakuNode && currentTopic && !isSubscribed && web3Provider) {
-      setupSubscription();
-    }
-  }, [wakuNode, currentTopic, setupSubscription, isSubscribed, web3Provider]);
+  }, [initializeNewProvider]);
 
   const handleWalletConnect = async (provider: ethers.providers.Web3Provider, connectedAccount: string) => {
     setWeb3Provider(provider);
@@ -432,12 +447,19 @@ const ChatInterfaceInner: React.FC = () => {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim() || !account || !web3Provider || !isSubscribed) {
+      console.log('Message validation failed:', {
+        hasInput: !!inputText.trim(),
+        hasAccount: !!account,
+        hasProvider: !!web3Provider,
+        isSubscribed
+      });
       setError("Please ensure you're connected and the subscription is set up before sending a message.");
       return;
     }
 
     // Check if there's no condition set, and set the default condition if needed
     if (!condition) {
+      console.log('No condition set, generating default condition');
       const defaultCondition = generateDefaultCondition();
       setCondition(defaultCondition);
       setConditionDescription(`Time: ${new Date(defaultCondition.value.returnValueTest.value * 1000).toLocaleString()}`);
@@ -445,6 +467,7 @@ const ChatInterfaceInner: React.FC = () => {
 
     // Check if the user is on the Polygon Amoy network
     if (!isCorrectNetwork) {
+      console.log('Not on correct network, attempting to switch');
       const switched = await switchToPolygonAmoy();
       if (!switched) {
         setError("Please switch to the Polygon Amoy network to send messages.");
@@ -453,11 +476,18 @@ const ChatInterfaceInner: React.FC = () => {
     }
 
     try {
-      console.log('Encrypting message...');
+      console.log('Starting message encryption process...');
       console.log('Condition:', condition);
       console.log('Domain:', currentDomain);
       console.log('Ritual ID:', ritualId);
-      const messageKit = await encryptMessage(inputText.trim(), web3Provider, condition, currentDomain, ritualId);
+      
+      const messageKit = await encryptMessage(
+        inputText.trim(), 
+        web3Provider, 
+        condition, 
+        currentDomain, 
+        ritualId
+      );
       console.log('Message encrypted successfully:', messageKit);
 
       if (wakuNode) {
@@ -465,14 +495,21 @@ const ChatInterfaceInner: React.FC = () => {
         const messageKitBytes = messageKit.toBytes();
         const conditionString = JSON.stringify(condition);
         const timestamp = Date.now();
-        await sendWakuMessage(currentTopic.name, account, messageKitBytes, nickname, conditionString);
+        
+        await sendWakuMessage(
+          currentTopic.name, 
+          account, 
+          messageKitBytes, 
+          nickname, 
+          conditionString
+        );
         console.log('Encrypted message sent via Waku');
         
         const messageKey = `${account}-${timestamp}`;
         setSentMessages(prev => new Map(prev).set(messageKey, timestamp));
         console.log('Updated sentMessages:', Array.from(sentMessages.entries()));
 
-        const newMessage: Message = {
+        const newMessage: ChatMessage = {
           id: timestamp,
           sender: account,
           senderNickname: nickname,
@@ -484,7 +521,6 @@ const ChatInterfaceInner: React.FC = () => {
           delivered: false,
         };
         
-        // Add the sent message to the displayed list
         setFilteredMessages(prevMessages => {
           const updatedMessages = [...prevMessages, newMessage];
           return updatedMessages.sort((a, b) => a.timestamp - b.timestamp);
@@ -523,14 +559,6 @@ const ChatInterfaceInner: React.FC = () => {
       // Clear messages for the new topic
       setMessages([]);
     }
-  };
-
-  const updateTopicWithNewMessage = (topicName: string, message: string) => {
-    setTopics(prevTopics => prevTopics.map(topic => 
-      topic.name === topicName 
-        ? { ...topic, lastMessage: message, lastMessageTime: Date.now() } 
-        : topic
-    ));
   };
 
   const toggleSettings = () => {
@@ -622,22 +650,6 @@ const ChatInterfaceInner: React.FC = () => {
     return condition;
   };
 
-  // Modify the filterMessages function
-  const filterMessages = useCallback((messages: Message[]) => {
-    return messages.filter(message => 
-      message.sender === account || // Keep outgoing messages
-      (message.sender !== account && message.encrypted) // Keep encrypted messages from others
-    );
-  }, [account]);
-
-  // Modify the setMessages calls to use the filterMessages function
-  const setFilteredMessages = useCallback((newMessages: Message[] | ((prevMessages: Message[]) => Message[])) => {
-    setMessages(prevMessages => {
-      const updatedMessages = typeof newMessages === 'function' ? newMessages(prevMessages) : newMessages;
-      return filterMessages(updatedMessages);
-    });
-  }, [filterMessages]);
-
   const handleRetryDecryption = async (messageId: number) => {
     const messageToDecrypt = messages.find(msg => msg.id === messageId);
     if (!messageToDecrypt || !web3Provider || !messageToDecrypt.encryptedContent) return;
@@ -684,7 +696,7 @@ const ChatInterfaceInner: React.FC = () => {
         const messageKey = `${account}-${timestamp}`;
         setSentMessages(prev => new Map(prev).set(messageKey, timestamp));
 
-        const newMessage: Message = {
+        const newMessage: ChatMessage = {
           id: timestamp,
           sender: account,
           senderNickname: nickname,
@@ -705,7 +717,7 @@ const ChatInterfaceInner: React.FC = () => {
       console.error('Error sending location:', error);
       setError('Failed to send location update');
     }
-  }, [account, web3Provider, condition, currentDomain, ritualId, wakuNode, nickname, currentTopic.name, isSubscribed]);
+  }, [account, web3Provider, condition, currentDomain, ritualId, wakuNode, nickname, currentTopic.name, isSubscribed, setFilteredMessages]);
 
   useEffect(() => {
     const now = Date.now();
@@ -723,7 +735,6 @@ const ChatInterfaceInner: React.FC = () => {
 
   const handleMemberClick = (userId: string) => {
     setCenterOnUserId(userId);
-    setCurrentView('map'); // Switch to map view when clicking a member
   };
 
   // Update condition description when condition changes
@@ -732,6 +743,25 @@ const ChatInterfaceInner: React.FC = () => {
       setConditionDescription(`Time: ${new Date(condition.returnValueTest.value * 1000).toLocaleString()}`);
     }
   }, [condition]);
+
+  // Single effect to handle subscription setup
+  useEffect(() => {
+    if (!isSubscribed && wakuNode && currentTopic && web3Provider && !isSettingUpSubscription.current) {
+      setupSubscription();
+    }
+  }, [isSubscribed, wakuNode, currentTopic, web3Provider, setupSubscription]);
+
+  // Cleanup effect
+  useEffect(() => {
+    return () => {
+      if (subscriptionRef.current) {
+        console.log('Cleaning up subscriptions on unmount');
+        subscriptionRef.current.unsubscribe();
+        subscriptionRef.current = null;
+      }
+      isSettingUpSubscription.current = false;
+    };
+  }, []);
 
   return (
     <div className="flex flex-col h-screen bg-black text-white relative overflow-hidden">
@@ -840,7 +870,6 @@ const ChatInterfaceInner: React.FC = () => {
             onSendMessage={handleSendMessage}
             inputText={inputText}
             onInputChange={(e) => setInputText(e.target.value)}
-            messages={messages}
             isCurrentUser={(sender) => sender === account}
             canDecryptMessage={canDecryptMessage}
             decryptingMessages={decryptingMessages}
@@ -871,50 +900,7 @@ const ChatInterfaceInner: React.FC = () => {
       )}
 
       {/* About popup */}
-      {isAboutOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-gray-900 bg-opacity-80 backdrop-filter backdrop-blur-md p-6 rounded-lg max-w-2xl w-full shadow-xl border border-gray-700 relative">
-            {/* Title bar */}
-            <div className="absolute top-0 left-0 right-0 bg-gray-800 bg-opacity-90 p-3 rounded-t-lg flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-white flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                </svg>
-                About Arc
-              </h2>
-              <button
-                onClick={toggleAbout}
-                className="text-gray-400 hover:text-white transition-colors duration-200"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            {/* Content */}
-            <div className="mt-12 text-gray-300">
-              <p className="mb-4">
-                Arc is a privacy-preserving, permissionless, decentralized location sharing application.
-              </p>
-              <ul className="list-disc list-inside mb-4">
-                <li>Utilizes Waku nodes for decentralized message routing</li>
-                <li>Implements Threshold's Taco for E2E encryption and access control</li>
-              </ul>
-              <div className="flex items-center justify-center space-x-4 mb-4">
-                <a href="https://docs.waku.org/" target="_blank" rel="noopener noreferrer" className="flex items-center bg-gray-800 bg-opacity-70 px-3 py-2 rounded-lg hover:bg-opacity-100 transition-colors duration-200">
-                  <img src="https://docs.waku.org/theme/image/logo.svg" alt="Waku" className="w-6 h-6 mr-2" />
-                  <span className="text-blue-400 hover:text-blue-300">Waku</span>
-                </a>
-                <a href="https://threshold.network/build/taco" target="_blank" rel="noopener noreferrer" className="flex items-center bg-gray-800 bg-opacity-70 px-3 py-2 rounded-lg hover:bg-opacity-100 transition-colors duration-200">
-                  <img src="https://docs.threshold.network/~gitbook/image?url=https%3A%2F%2F2518393180-files.gitbook.io%2F%7E%2Ffiles%2Fv0%2Fb%2Fgitbook-x-prod.appspot.com%2Fo%2Fspaces%252FWosjlL4zUGUMlcMfuSAp%252Flogo%252FzAAyu1YeuoKu82a8J4Du%252Favatar-circle-purple.png%3Falt%3Dmedia%26token%3D8a013e20-022c-4fac-bf2d-166bba94e04d&width=128&dpr=2&quality=100&sign=b3490513&sv=1" alt="Taco" className="w-6 h-6 mr-2" />
-                  <span className="text-blue-400 hover:text-blue-300">Taco</span>
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <AboutPopup isOpen={isAboutOpen} onClose={toggleAbout} />
 
       <style jsx>{`
         @keyframes backgroundMove {

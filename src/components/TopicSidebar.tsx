@@ -20,7 +20,6 @@ const TopicSidebar: React.FC<TopicSidebarProps> = ({
   currentTopic,
   onTopicSelect,
   onTopicCreate,
-  backgroundStyle,
   activeUsers = new Map(),
   onMemberClick
 }) => {

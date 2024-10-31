@@ -1,4 +1,5 @@
 import React from 'react';
+import Image from 'next/image';
 import makeBlockie from 'ethereum-blockies-base64';
 
 interface BlockieProps {
@@ -11,7 +12,7 @@ const Blockie: React.FC<BlockieProps> = ({ address, size = 24, className = '' })
   const blockieUrl = makeBlockie(address);
 
   return (
-    <img
+    <Image
       src={blockieUrl}
       width={size}
       height={size}
@@ -21,4 +22,4 @@ const Blockie: React.FC<BlockieProps> = ({ address, size = 24, className = '' })
   );
 };
 
-export default Blockie; 
+export default Blockie;

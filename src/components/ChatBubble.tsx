@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { conditions } from '@nucypher/taco';
 import Blockie from './Blockie';
 
 interface ChatBubbleProps {

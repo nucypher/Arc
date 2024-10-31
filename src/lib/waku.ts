@@ -2,6 +2,7 @@ import { createLightNode, Protocols, createEncoder, createDecoder } from '@waku/
 import protobuf from 'protobufjs';
 import { ThresholdMessageKit } from '@nucypher/taco';
 import { encryptMessage, decryptMessage } from './taco';
+import { LocationUpdate } from '../components/MapView';
 
 export const domainUUID = '876c3672-d8ca-4778-88e7-954f35cb2bbd';
 export const defaultContentTopic = `/taco-${domainUUID}/1/messages/proto`;
@@ -14,14 +15,7 @@ let wakuNode: any = null;
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY = 2000; // 2 seconds
 
-export const Message = new protobuf.Type('Message')
-  .add(new protobuf.Field('timestamp', 1, 'uint64'))
-  .add(new protobuf.Field('sender', 2, 'string'))
-  .add(new protobuf.Field('nickname', 3, 'string'))
-  .add(new protobuf.Field('content', 4, 'bytes'))
-  .add(new protobuf.Field('condition', 5, 'string'));
-
-export const LocationUpdate = new protobuf.Type('LocationUpdate')
+export const DataPacket = new protobuf.Type('DataPacket')
   .add(new protobuf.Field('timestamp', 1, 'uint64'))
   .add(new protobuf.Field('sender', 2, 'string'))
   .add(new protobuf.Field('nickname', 3, 'string'))
@@ -98,14 +92,11 @@ export const subscribeToMessages = async (topic: string, callback: (message: any
     console.error('Waku node not initialized');
     throw new Error('Waku node not initialized');
   }
-
-  console.log(`Subscribing to topic: ${topic}`);
   
   try {
     const subscription = await wakuNode.filter.subscribe([createDecoder(topic)], (wakuMessage: any) => {
       if (!wakuMessage.payload) return;
-      const decodedMessage = Message.decode(wakuMessage.payload);
-      console.log('Received message:', decodedMessage);
+      const decodedMessage = DataPacket.decode(wakuMessage.payload);
       callback(decodedMessage);
     });
     console.log(`Successfully subscribed to topic: ${topic}`);
@@ -119,7 +110,7 @@ export const subscribeToMessages = async (topic: string, callback: (message: any
 export const sendWakuMessage = async (topic: string, sender: string, messageKit: Uint8Array, nickname: string, condition: string) => {
   if (!wakuNode) throw new Error('Waku node not initialized');
 
-  const protoMessage = Message.create({
+  const protoMessage = DataPacket.create({
     timestamp: Date.now(),
     sender,
     nickname,
@@ -127,22 +118,12 @@ export const sendWakuMessage = async (topic: string, sender: string, messageKit:
     condition,
   });
 
-  const serializedMessage = Message.encode(protoMessage).finish();
+  const serializedMessage = DataPacket.encode(protoMessage).finish();
 
   await wakuNode.lightPush.send(messageEncoder, {
     payload: serializedMessage,
   });
 };
-
-interface LocationUpdate {
-  sender: string;
-  nickname: string;
-  latitude: number;
-  longitude: number;
-  accuracy: number;
-  isLive: boolean;
-  timestamp: number;
-}
 
 export const sendLocationUpdate = async (
   sender: string,
@@ -180,7 +161,7 @@ export const sendLocationUpdate = async (
     const encryptedContent = messageKit.toBytes();
 
     // Create location update message with encrypted content
-    const locationUpdate = LocationUpdate.create({
+    const locationUpdate = DataPacket.create({
       timestamp: Date.now(),
       sender,
       nickname,
@@ -189,7 +170,7 @@ export const sendLocationUpdate = async (
     });
 
     console.log('[Location] Sending encrypted location update');
-    const serializedMessage = LocationUpdate.encode(locationUpdate).finish();
+    const serializedMessage = DataPacket.encode(locationUpdate).finish();
     await wakuNode.lightPush.send(locationEncoder, {
       payload: serializedMessage,
     });
@@ -216,7 +197,7 @@ export const subscribeToLocationUpdates = async (
 
       try {
         // Decode the protobuf message
-        const decodedMessage = LocationUpdate.decode(wakuMessage.payload);
+        const decodedMessage = DataPacket.decode(wakuMessage.payload);
         
         if (!web3Provider) {
           console.error('[Location] Web3Provider not available for decryption');
@@ -244,13 +225,14 @@ export const subscribeToLocationUpdates = async (
           // Pass the decrypted update to the callback
           callback(update);
         } catch (decryptError) {
-          console.error('[Location] Failed to decrypt location update');
+          console.error('[Location] Failed to decrypt location update:', decryptError);
         }
       } catch (error) {
-        console.error('[Location] Error processing location update');
+        console.error('[Location] Error processing location update:', error);
       }
     });
 
+    console.log(`Successfully subscribed to topic: ${locationContentTopic}`);
     return subscription;
   } catch (error) {
     console.error('[Location] Error setting up location subscription:', error);

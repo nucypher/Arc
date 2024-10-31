@@ -2,10 +2,9 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { sendLocationUpdate, subscribeToLocationUpdates } from '../lib/waku';
+import { sendLocationUpdate } from '../lib/waku';
 import Blockie from './Blockie';
 import makeBlockie from 'ethereum-blockies-base64';
-import { FaMapMarkerAlt } from 'react-icons/fa';
 import ChatBubble from './ChatBubble';
 import TacoConditionBuilder from './TacoConditionBuilder';
 import TacoDomainSelector from './TacoDomainSelector';
@@ -13,31 +12,17 @@ import * as ethers from 'ethers';
 
 // Fix for default marker icons in react-leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-});
 
-// Create a custom icon for the user's location
-const userIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-violet.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
-
-// Create a custom icon for received location updates
-const receivedLocationIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-yellow.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
+// Add the LocationUpdate interface at the top of the file and export it
+export interface LocationUpdate {
+  sender: string;
+  nickname: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  isLive: boolean;
+  timestamp: number;
+}
 
 // Component to handle map updates
 const MapUpdater: React.FC<{ center: [number, number] }> = ({ center }) => {
@@ -60,7 +45,7 @@ interface MapViewProps {
   nickname: string;
   liveLocations: Map<string, LocationUpdate>;
   centerOnUser?: string;
-  onSendMessage: (e: React.FormEvent) => void;
+  onSendMessage: (e: React.FormEvent) => Promise<void>;
   inputText: string;
   onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   messages: Message[];
@@ -81,16 +66,6 @@ interface MapViewProps {
   web3Provider: ethers.providers.Web3Provider;
   condition: any;
   ritualId: string;
-}
-
-interface LocationUpdate {
-  sender: string;
-  nickname: string;
-  latitude: number;
-  longitude: number;
-  accuracy: number;
-  timestamp: number;
-  isLive: boolean;
 }
 
 // Add this new interface for the LiveShareControl props
@@ -339,7 +314,6 @@ const MapView: React.FC<MapViewProps> = ({
   onRetryDecryption,
   isSettingsOpen,
   onCloseSettings,
-  settingsContent,
   onNicknameChange,
   onSaveNickname,
   isEditingNickname,
@@ -356,12 +330,10 @@ const MapView: React.FC<MapViewProps> = ({
   const [defaultCenter, setDefaultCenter] = useState<[number, number]>([0, 0]);
   const [hasSetInitialPosition, setHasSetInitialPosition] = useState(false);
   const [userPosition, setUserPosition] = useState<[number, number] | null>(null);
-  const [locationError, setLocationError] = useState<string | null>(null);
   const [isSettingUpSharing, setIsSettingUpSharing] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
-  const saveSuccessTimeoutRef = useRef<NodeJS.Timeout>();
 
   const requestLocationPermission = async (): Promise<GeolocationPosition | false> => {
     console.log('Requesting location permission...');
@@ -526,26 +498,32 @@ const MapView: React.FC<MapViewProps> = ({
   useEffect(() => {
     if (!hasSetInitialPosition && "geolocation" in navigator) {
       console.log('Getting initial position...');
-      navigator.geolocation.getCurrentPosition(
+      const positionPromise = new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          resolve,
+          reject,
+          {
+            enableHighAccuracy: false,
+            timeout: 10000,
+            maximumAge: 30000
+          }
+        );
+      });
+
+      positionPromise.then(
         (position) => {
-          console.log('Initial position received');
           const newPosition: [number, number] = [position.coords.latitude, position.coords.longitude];
           setDefaultCenter(newPosition);
           setUserPosition(newPosition);
           setHasSetInitialPosition(true);
-        },
-        (error) => {
-          console.warn('Error getting initial position:', error);
-          // Set a default position but don't treat it as an error
-          setDefaultCenter([51.505, -0.09]);
-          setHasSetInitialPosition(true);
-        },
-        {
-          enableHighAccuracy: false,
-          timeout: 10000,
-          maximumAge: 30000
+          console.log('Initial position set');
         }
-      );
+      ).catch((error) => {
+        console.warn('Error getting initial position:', error);
+        // Set a default position but don't treat it as an error
+        setDefaultCenter([51.505, -0.09]);
+        setHasSetInitialPosition(true);
+      });
     }
   }, [hasSetInitialPosition]);
 
@@ -574,38 +552,6 @@ const MapView: React.FC<MapViewProps> = ({
   const truncateAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
-
-  // Add this function to handle settings updates
-  const handleSettingsUpdate = async (callback: () => void | Promise<void>) => {
-    setIsSavingSettings(true);
-    setShowSaveSuccess(false);
-    
-    try {
-      await callback();
-      setShowSaveSuccess(true);
-      
-      // Clear any existing timeout
-      if (saveSuccessTimeoutRef.current) {
-        clearTimeout(saveSuccessTimeoutRef.current);
-      }
-      
-      // Hide the success checkmark after 3 seconds
-      saveSuccessTimeoutRef.current = setTimeout(() => {
-        setShowSaveSuccess(false);
-      }, 3000);
-    } finally {
-      setIsSavingSettings(false);
-    }
-  };
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (saveSuccessTimeoutRef.current) {
-        clearTimeout(saveSuccessTimeoutRef.current);
-      }
-    };
-  }, []);
 
   // Parse location messages to get coordinates
   const locationMarkers = messages
@@ -768,7 +714,20 @@ const MapView: React.FC<MapViewProps> = ({
       </div>
 
       <div className="absolute bottom-4 left-4 right-4 bg-gray-900 bg-opacity-75 backdrop-blur-sm rounded-lg border border-gray-800 p-4 z-[1000]">
-        <form onSubmit={onSendMessage} className="flex space-x-2">
+        <form 
+          onSubmit={async (e) => {
+            e.preventDefault();
+            console.log('Form submitted in MapView, input text:', inputText);
+            if (inputText.trim()) {
+              try {
+                await onSendMessage(e);
+              } catch (error) {
+                console.error('Error sending message:', error);
+              }
+            }
+          }} 
+          className="flex space-x-2"
+        >
           <input
             type="text"
             value={inputText}
@@ -778,7 +737,12 @@ const MapView: React.FC<MapViewProps> = ({
           />
           <button 
             type="submit" 
-            className="px-4 py-2 bg-blue-600 text-white rounded-r hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center"
+            className={`px-4 py-2 ${
+              inputText.trim() 
+                ? 'bg-blue-600 hover:bg-blue-700' 
+                : 'bg-gray-600 cursor-not-allowed'
+            } text-white rounded-r transition-colors duration-200 flex items-center justify-center`}
+            disabled={!inputText.trim()}
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
               <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
@@ -857,17 +821,10 @@ const MapView: React.FC<MapViewProps> = ({
                     <p className="text-sm text-gray-400">Choose how your messages will be encrypted</p>
                   </div>
 
-                  <div className="bg-gray-800 bg-opacity-50 rounded-lg p-4">
-                    <div className="space-y-4">
-                      <TacoConditionBuilder 
-                        onConditionChange={async (condition) => {
-                          await handleSettingsUpdate(async () => {
-                            handleConditionChange(condition);
-                          });
-                        }} 
-                      />
-                    </div>
-                  </div>
+                  <TacoConditionBuilder 
+                    onConditionChange={handleConditionChange} 
+                    isActive={isSettingsOpen}
+                  />
                 </div>
 
                 <div className="space-y-4">
@@ -883,7 +840,10 @@ const MapView: React.FC<MapViewProps> = ({
                     <div className="flex justify-between items-center">
                       <span className="text-gray-400">Taco Domain</span>
                       <div className="w-32">
-                        <TacoDomainSelector onDomainChange={handleDomainChange} currentDomain={currentDomain} />
+                        <TacoDomainSelector 
+                          onDomainChange={handleDomainChange} 
+                          currentDomain={currentDomain} 
+                        />
                       </div>
                     </div>
                   </div>
