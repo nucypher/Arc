@@ -92,7 +92,7 @@ const WalletConnectButton: React.FC<WalletConnectProps> = ({ onConnect, connecte
     >
       {displayAddress ? (
         <>
-          <Blockie address={displayAddress} size={16} className="mr-1.5 hidden sm:block" />
+          <Blockie address={displayAddress} size={16} className="mr-1.5" />
           <span className="truncate max-w-[80px] sm:max-w-[120px]">{truncateAddress(displayAddress)}</span>
         </>
       ) : (

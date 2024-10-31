@@ -1,6 +1,6 @@
 import React from 'react';
-import Image from 'next/image';
 import makeBlockie from 'ethereum-blockies-base64';
+import Image from 'next/image';
 
 interface BlockieProps {
   address: string;
@@ -9,17 +9,26 @@ interface BlockieProps {
 }
 
 const Blockie: React.FC<BlockieProps> = ({ address, size = 24, className = '' }) => {
-  const blockieUrl = makeBlockie(address);
+  if (!address) {
+    return null;
+  }
 
-  return (
-    <Image
-      src={blockieUrl}
-      width={size}
-      height={size}
-      className={`rounded-full ${className}`}
-      alt={`${address} blockie`}
-    />
-  );
+  try {
+    const blockieUrl = makeBlockie(address);
+
+    return (
+      <Image
+        src={blockieUrl}
+        alt={`Blockie for ${address}`}
+        width={size}
+        height={size}
+        className={`rounded-full ${className}`}
+      />
+    );
+  } catch (error) {
+    console.error('Error generating blockie:', error);
+    return null;
+  }
 };
 
 export default Blockie;
