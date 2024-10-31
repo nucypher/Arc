@@ -63,25 +63,49 @@ interface LocationUpdate {
   isLive: boolean;
 }
 
-// Add this new control component for the live sharing button
-const LiveShareControl: React.FC<{
+// Add this new interface for the LiveShareControl props
+interface LiveShareControlProps {
   isSharing: boolean;
+  isSettingUp: boolean; // Add this new prop
   onStartSharing: () => void;
   onStopSharing: () => void;
-}> = ({ isSharing, onStartSharing, onStopSharing }) => {
+}
+
+// Add this new control component for the live sharing button
+const LiveShareControl: React.FC<LiveShareControlProps> = ({ 
+  isSharing, 
+  isSettingUp,
+  onStartSharing, 
+  onStopSharing 
+}) => {
   return (
     <div className="leaflet-top leaflet-right" style={{ zIndex: 1000 }}>
       <div className="leaflet-control leaflet-bar m-4">
         {!isSharing ? (
           <button
             onClick={onStartSharing}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors duration-200 flex items-center shadow-lg"
+            disabled={isSettingUp}
+            className={`px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors duration-200 flex items-center shadow-lg ${
+              isSettingUp ? 'opacity-75 cursor-not-allowed' : ''
+            }`}
           >
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            Start Live Sharing
+            {isSettingUp ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Connecting...
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Start Live Sharing
+              </>
+            )}
           </button>
         ) : (
           <div className="flex flex-col space-y-2">
@@ -113,6 +137,7 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
   const [userPosition, setUserPosition] = useState<[number, number] | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [liveLocations, setLiveLocations] = useState<Map<string, LocationUpdate>>(new Map());
+  const [isSettingUpSharing, setIsSettingUpSharing] = useState(false); // Add this new state
 
   // Get user's initial position for map center
   useEffect(() => {
@@ -296,91 +321,103 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
 
   const startSharingLocation = async () => {
     console.log('Starting location sharing...');
-    const hasPermission = await requestLocationPermission();
-    console.log('Permission check result:', hasPermission);
-    if (!hasPermission) return;
+    setIsSettingUpSharing(true);
+    
+    try {
+      const hasPermission = await requestLocationPermission();
+      console.log('Permission check result:', hasPermission);
+      if (!hasPermission) {
+        setIsSettingUpSharing(false);
+        return;
+      }
 
-    if ("geolocation" in navigator) {
-      console.log('Setting up live location sharing...');
-      
-      // First get a single position with high accuracy
-      try {
-        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(
-            resolve,
-            reject,
+      if ("geolocation" in navigator) {
+        console.log('Setting up live location sharing...');
+        
+        // First get a single position with high accuracy
+        try {
+          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(
+              resolve,
+              reject,
+              {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+              }
+            );
+          });
+
+          // If we got an initial position, start watching with more lenient settings
+          console.log('Got initial position, starting watch');
+          watchIdRef.current = navigator.geolocation.watchPosition(
+            async (position) => {
+              console.log('Live sharing position update:', {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude,
+                accuracy: position.coords.accuracy,
+                timestamp: new Date(position.timestamp).toISOString()
+              });
+
+              try {
+                await sendLocationUpdate(
+                  account,
+                  nickname,
+                  position.coords.latitude,
+                  position.coords.longitude,
+                  position.coords.accuracy,
+                  true
+                );
+              } catch (error) {
+                console.error('Failed to send location update:', error);
+              }
+
+              if (onShareLocation) {
+                onShareLocation({
+                  lat: position.coords.latitude,
+                  lng: position.coords.longitude
+                });
+              }
+              setLocationError(null);
+            },
+            (error) => {
+              console.error('Error in live location sharing:', error, {
+                code: error.code,
+                message: error.message
+              });
+              const errorMessage = getGeolocationErrorMessage(error);
+              setLocationError(errorMessage);
+              
+              // Only stop and retry if it's a timeout error
+              if (error.code === error.TIMEOUT) {
+                console.log('Timeout error, retrying with more lenient settings...');
+                stopSharingLocation();
+                retryWithLongerTimeout();
+              }
+            },
             {
-              enableHighAccuracy: true,
-              timeout: 10000,
-              maximumAge: 0
+              enableHighAccuracy: false, // Less strict accuracy for continuous updates
+              timeout: 15000,           // 15 second timeout
+              maximumAge: 10000,        // Accept positions up to 10 seconds old
+              maximumAge: 10000
             }
           );
-        });
-
-        // If we got an initial position, start watching with more lenient settings
-        console.log('Got initial position, starting watch');
-        watchIdRef.current = navigator.geolocation.watchPosition(
-          async (position) => {
-            console.log('Live sharing position update:', {
-              lat: position.coords.latitude,
-              lng: position.coords.longitude,
-              accuracy: position.coords.accuracy,
-              timestamp: new Date(position.timestamp).toISOString()
-            });
-
-            try {
-              await sendLocationUpdate(
-                account,
-                nickname,
-                position.coords.latitude,
-                position.coords.longitude,
-                position.coords.accuracy,
-                true
-              );
-            } catch (error) {
-              console.error('Failed to send location update:', error);
-            }
-
-            if (onShareLocation) {
-              onShareLocation({
-                lat: position.coords.latitude,
-                lng: position.coords.longitude
-              });
-            }
-            setLocationError(null);
-          },
-          (error) => {
-            console.error('Error in live location sharing:', error, {
-              code: error.code,
-              message: error.message
-            });
-            const errorMessage = getGeolocationErrorMessage(error);
-            setLocationError(errorMessage);
-            
-            // Only stop and retry if it's a timeout error
-            if (error.code === error.TIMEOUT) {
-              console.log('Timeout error, retrying with more lenient settings...');
-              stopSharingLocation();
-              retryWithLongerTimeout();
-            }
-          },
-          {
-            enableHighAccuracy: false, // Less strict accuracy for continuous updates
-            timeout: 15000,           // 15 second timeout
-            maximumAge: 10000,        // Accept positions up to 10 seconds old
-            maximumAge: 10000
-          }
-        );
-        console.log('Live sharing watch started with ID:', watchIdRef.current);
-        setIsSharing(true);
-      } catch (initialError) {
-        console.error('Failed to get initial position:', initialError);
-        // Fall back to less accurate watching immediately
-        retryWithLongerTimeout();
+          console.log('Live sharing watch started with ID:', watchIdRef.current);
+          setIsSharing(true);
+        } catch (initialError) {
+          console.error('Failed to get initial position:', initialError);
+          // Fall back to less accurate watching immediately
+          retryWithLongerTimeout();
+        }
+      } else {
+        console.error('Geolocation not supported');
+        setLocationError("Geolocation is not supported by your browser");
       }
-    } else {
-      console.error('Geolocation not supported');
-      setLocationError("Geolocation is not supported by your browser");
+    } catch (error) {
+      console.error('Error setting up location sharing:', error);
+      setLocationError("Failed to set up location sharing");
+    } finally {
+      setIsSettingUpSharing(false);
     }
   };
 
@@ -481,6 +518,7 @@ const MapView: React.FC<MapViewProps> = ({ messages, onShareLocation, account, n
             {/* Live sharing control */}
             <LiveShareControl
               isSharing={isSharing}
+              isSettingUp={isSettingUpSharing}
               onStartSharing={startSharingLocation}
               onStopSharing={stopSharingLocation}
             />
