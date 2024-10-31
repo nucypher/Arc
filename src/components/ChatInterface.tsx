@@ -712,7 +712,7 @@ const ChatInterfaceInner: React.FC = () => {
           />
         </div>
         
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 relative overflow-hidden">
           <TopicSidebar
             topics={topics}
             currentTopic={currentTopic.name}
@@ -722,7 +722,6 @@ const ChatInterfaceInner: React.FC = () => {
             activeUsers={activeUsers}
             onMemberClick={handleMemberClick}
           />
-          
           <MapView 
             messages={messages} 
             onShareLocation={handleLiveLocation}

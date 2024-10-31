@@ -597,7 +597,7 @@ const MapView: React.FC<MapViewProps> = ({
   ];
 
   return (
-    <div className="flex-1 bg-gray-900 relative">
+    <div className="flex-1 relative">
       <style>{darkPopupStyle}</style>
       
       {locationError && (
@@ -606,12 +606,12 @@ const MapView: React.FC<MapViewProps> = ({
         </div>
       )}
 
-      {/* Map */}
-      <div className="absolute inset-0">
+      {/* Map - position it under everything with negative left margin */}
+      <div className="absolute inset-0 -left-64 z-0">
         <MapContainer
           center={defaultCenter}
           zoom={13}
-          style={{ height: '100%', width: '100%' }}
+          style={{ height: '100%', width: 'calc(100% + 16rem)' }} // Add 16rem (64px * 4) to width
           zoomControl={false}
           className="dark-theme-map"
         >
@@ -665,24 +665,26 @@ const MapView: React.FC<MapViewProps> = ({
         </MapContainer>
       </div>
 
-      {/* Chat messages overlay - adjusted top margin to be even higher */}
-      <div className="absolute top-32 right-4 bottom-24 w-96 bg-gray-900 bg-opacity-75 rounded-lg backdrop-blur-sm border border-gray-800 overflow-hidden z-[1000]">
+      {/* Chat messages overlay */}
+      <div className="absolute top-32 right-4 bottom-24 w-96 overflow-hidden z-[1000]">
         <div className="h-full overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
           {chatMessages.map((message) => (
-            <ChatBubble
-              key={message.id}
-              message={message}
-              isCurrentUser={isCurrentUser(message.sender)}
-              canDecrypt={canDecryptMessage(message.condition)}
-              isDecrypting={decryptingMessages.has(message.id)}
-              onRetryDecryption={onRetryDecryption}
-            />
+            <div className="backdrop-blur-sm bg-black bg-opacity-30 rounded-lg">
+              <ChatBubble
+                key={message.id}
+                message={message}
+                isCurrentUser={isCurrentUser(message.sender)}
+                canDecrypt={canDecryptMessage(message.condition)}
+                isDecrypting={decryptingMessages.has(message.id)}
+                onRetryDecryption={onRetryDecryption}
+              />
+            </div>
           ))}
         </div>
       </div>
 
       {/* Chat input overlay */}
-      <div className="absolute bottom-4 left-4 right-4 bg-gray-900 bg-opacity-75 backdrop-blur-sm rounded-lg border border-gray-800 p-4 z-[1000]">
+      <div className="absolute bottom-4 left-[280px] right-4 bg-gray-900 bg-opacity-75 backdrop-blur-sm rounded-lg border border-gray-800 p-4 z-[1000]">
         <form onSubmit={onSendMessage} className="flex space-x-2">
           <input
             type="text"

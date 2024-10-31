@@ -45,7 +45,7 @@ const TopicSidebar: React.FC<TopicSidebarProps> = ({
   };
 
   return (
-    <div className="w-64 bg-gray-900 border-r border-gray-800 overflow-y-auto">
+    <div className="w-64 bg-gray-900 bg-opacity-75 backdrop-blur-sm border-r border-gray-800 overflow-y-auto z-[900] relative">
       <div className="p-4">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-gray-200">Channels</h2>
@@ -67,7 +67,7 @@ const TopicSidebar: React.FC<TopicSidebarProps> = ({
               value={newTopicName}
               onChange={(e) => setNewTopicName(e.target.value)}
               placeholder="New channel name"
-              className="w-full px-3 py-2 bg-gray-800 text-gray-200 rounded border border-gray-700 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder-gray-500"
+              className="w-full px-3 py-2 bg-gray-800 bg-opacity-50 text-gray-200 rounded border border-gray-700 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder-gray-500"
             />
           </form>
         )}
@@ -80,7 +80,7 @@ const TopicSidebar: React.FC<TopicSidebarProps> = ({
                 className={`w-full text-left px-3 py-2 rounded transition-colors duration-150 ${
                   currentTopic === topic.name
                     ? 'bg-blue-600 bg-opacity-50 text-white border border-blue-500'
-                    : 'text-gray-300 hover:bg-gray-800 hover:text-gray-100'
+                    : 'text-gray-300 hover:bg-gray-800 hover:bg-opacity-50 hover:text-gray-100'
                 }`}
               >
                 <div className="flex items-center">
@@ -91,15 +91,15 @@ const TopicSidebar: React.FC<TopicSidebarProps> = ({
               
               {/* Show channel members if this is the current topic */}
               {currentTopic === topic.name && activeUsers.size > 0 && (
-                <div className="bg-gray-800 bg-opacity-50 rounded">
-                  <div className="px-3 py-2 text-xs text-gray-500 uppercase tracking-wider border-b border-gray-700">
+                <div className="bg-gray-800 bg-opacity-30 backdrop-blur-sm rounded">
+                  <div className="px-3 py-2 text-xs text-gray-500 uppercase tracking-wider border-b border-gray-700 border-opacity-50">
                     Online
                   </div>
                   <div className="py-1">
                     {Array.from(activeUsers.entries()).map(([userId, user]) => (
                       <div 
                         key={userId} 
-                        className="px-3 py-1 flex items-center text-sm text-gray-400 hover:bg-gray-700 transition-colors duration-150 cursor-pointer"
+                        className="px-3 py-1 flex items-center text-sm text-gray-400 hover:bg-gray-700 hover:bg-opacity-50 transition-colors duration-150 cursor-pointer"
                         title={`Click to center map on ${user.nickname === 'Anonymous' ? truncateAddress(userId) : user.nickname}`}
                         onClick={() => onMemberClick?.(userId)}
                       >

@@ -114,11 +114,11 @@ const ChatBubble: React.FC<ChatBubbleProps> = ({
       className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
     >
       <div 
-        className={`relative max-w-[85%] p-4 rounded-lg shadow-md ${
+        className={`relative max-w-[85%] p-4 rounded-lg shadow-lg ${
           isCurrentUser 
-            ? 'bg-gray-800 bg-opacity-50 text-gray-200 border border-gray-600' 
-            : 'bg-gray-700 bg-opacity-50 text-gray-200 border border-gray-500'
-        } backdrop-blur-sm transition-all duration-300 hover:shadow-lg hover:shadow-gray-700/20`}
+            ? 'text-gray-200'
+            : 'text-gray-200'
+        } backdrop-blur-sm transition-all duration-300`}
       >
         <div className="font-bold text-sm mb-2 text-blue-300 flex items-center justify-between">
           <span>{isCurrentUser ? 'You' : (message.senderNickname || message.sender.slice(0, 6))}</span>
