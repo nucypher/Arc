@@ -14,6 +14,7 @@ import ChatBubble from './ChatBubble';
 import { FaExclamationCircle, FaMapMarkerAlt } from 'react-icons/fa'; // Change to circle icon
 import { switchToPolygonAmoy } from '../utils/ethereum';
 import MapView from './MapView';
+import { chainIdMapping } from './TacoConditionBuilder';
 
 interface Message {
   id: number;
@@ -38,7 +39,17 @@ const ChatInterfaceInner: React.FC = () => {
   const [inputText, setInputText] = useState('');
   const [web3Provider, setWeb3Provider] = useState<ethers.providers.Web3Provider | null>(null);
   const [account, setAccount] = useState<string | null>(null);
-  const [condition, setCondition] = useState<any>(null);
+  const [condition, setCondition] = useState<any>(() => {
+    const now = Math.floor(Date.now() / 1000);
+    return new conditions.base.time.TimeCondition({
+      returnValueTest: {
+        comparator: '>=',
+        value: now,
+      },
+      method: "blocktime",
+      chain: chainIdMapping['80002'], // Polygon Amoy
+    });
+  });
   const [conditionDescription, setConditionDescription] = useState<string | null>(null);
   const [currentDomain, setCurrentDomain] = useState<domains>(domains.TESTNET);
   const [error, setError] = useState<string | null>(null);
@@ -514,13 +525,22 @@ const ChatInterfaceInner: React.FC = () => {
 
   const generateDefaultCondition = () => {
     const now = Math.floor(Date.now() / 1000);
-    return new conditions.base.time.TimeCondition({
-      chain: chainIdMapping['80002'], // Polygon Amoy
+    const condition = new conditions.base.time.TimeCondition({
       returnValueTest: {
         comparator: '>=',
         value: now,
       },
+      method: "blocktime",
+      chain: chainIdMapping['80002'], // Polygon Amoy
     });
+
+    // Verify the condition is properly created before using it
+    if (!condition || !condition.returnValueTest || !condition.returnValueTest.value) {
+      console.error('Failed to generate default condition with proper structure');
+      return null;
+    }
+
+    return condition;
   };
 
   // Modify the filterMessages function
@@ -624,6 +644,13 @@ const ChatInterfaceInner: React.FC = () => {
     setCenterOnUserId(userId);
     setCurrentView('map'); // Switch to map view when clicking a member
   };
+
+  // Update condition description when condition changes
+  useEffect(() => {
+    if (condition?.returnValueTest?.value) {
+      setConditionDescription(`Time: ${new Date(condition.returnValueTest.value * 1000).toLocaleString()}`);
+    }
+  }, [condition]);
 
   return (
     <div className="flex flex-col h-screen bg-black text-white relative overflow-hidden">
