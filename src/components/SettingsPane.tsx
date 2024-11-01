@@ -2,8 +2,7 @@ import React from 'react';
 import TacoConditionBuilder from './TacoConditionBuilder';
 import TacoDomainSelector from './TacoDomainSelector';
 import Blockie from './Blockie';
-import { useAccount, WagmiConfig } from 'wagmi';
-import { wagmiConfig } from './WalletConnect'; // We'll export wagmiConfig from WalletConnect
+import { useAccount } from 'wagmi';
 
 interface SettingsPaneProps {
   onClose: () => void;
@@ -18,7 +17,7 @@ interface SettingsPaneProps {
   connectedAccount: string | null;
 }
 
-const SettingsPaneContent: React.FC<SettingsPaneProps> = ({
+const SettingsPane: React.FC<SettingsPaneProps> = ({
   onClose,
   nickname,
   onNicknameChange,
@@ -159,14 +158,6 @@ const SettingsPaneContent: React.FC<SettingsPaneProps> = ({
         </div>
       </div>
     </div>
-  );
-};
-
-const SettingsPane: React.FC<SettingsPaneProps> = (props) => {
-  return (
-    <WagmiConfig config={wagmiConfig}>
-      <SettingsPaneContent {...props} />
-    </WagmiConfig>
   );
 };
 

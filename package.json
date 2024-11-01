@@ -14,10 +14,9 @@
   "dependencies": {
     "@nucypher/taco": "^0.5.0",
     "@nucypher/taco-auth": "^0.2.0",
+    "@tanstack/react-query": "^5.28.4",
+    "@web3modal/wagmi": "^4.0.11",
     "@waku/sdk": "^0.0.29",
-    "@web3modal/ethereum": "2.7.1",
-    "@web3modal/react": "2.7.1",
-    "@wagmi/core": "1.4.7",
     "ethereum-blockies-base64": "^1.0.2",
     "ethers": "^5.7.2",
     "leaflet": "^1.9.4",
@@ -27,21 +26,25 @@
     "react-dom": "^18",
     "react-icons": "^5.3.0",
     "react-leaflet": "^4.2.1",
-    "viem": "1.19.9",
-    "wagmi": "1.4.7"
+    "viem": "^2.7.9",
+    "wagmi": "^2.5.7"
   },
   "devDependencies": {
+    "@types/leaflet": "^1.9.8",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.15",
+    "@typescript-eslint/eslint-plugin": "^7.2.0",
+    "@typescript-eslint/parser": "^7.2.0",
     "postcss": "^8",
     "tailwindcss": "^3.4.14",
     "typescript": "^5"
   },
-  "overrides": {
-    "viem": "1.19.9",
-    "@wagmi/core": "1.4.7"
+  "resolutions": {
+    "tslib": "^2.6.2",
+    "@walletconnect/universal-provider": "^2.11.2",
+    "@walletconnect/ethereum-provider": "^2.11.2",
+    "@walletconnect/modal": "^2.6.2",
+    "ethers": "^5.7.2"
   }
 }

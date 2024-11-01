@@ -1,8 +1,9 @@
+'use client';
+
 import React, { useState } from 'react';
 import { domains } from '@nucypher/taco';
-import { useNetwork } from 'wagmi';
-import { WagmiConfig } from 'wagmi';
-import { wagmiConfig } from './WalletConnect';
+import { useChainId } from 'wagmi';
+import { polygonAmoy } from 'wagmi/chains';
 
 interface WakuStatusProps {
   contentTopic: string | { name: string };
@@ -16,7 +17,7 @@ interface WakuStatusProps {
   onSidebarToggle: () => void;
 }
 
-const WakuStatusContent: React.FC<WakuStatusProps> = ({ 
+const WakuStatus: React.FC<WakuStatusProps> = ({ 
   contentTopic, 
   nickname, 
   tacoCondition, 
@@ -34,12 +35,15 @@ const WakuStatusContent: React.FC<WakuStatusProps> = ({
     return false;
   });
 
-  const { chain } = useNetwork();
+  const chainId = useChainId();
 
   const getNetworkName = (networkName: string): string => {
     // First check if we have chain info from wagmi
-    if (chain) {
-      return chain.name;
+    if (chainId) {
+      if (chainId === polygonAmoy.id) {
+        return 'Polygon Amoy';
+      }
+      return networkName;
     }
 
     // Fallback to the passed network name
@@ -225,15 +229,6 @@ const WakuStatusContent: React.FC<WakuStatusProps> = ({
         </div>
       </div>
     </div>
-  );
-};
-
-// Wrap the component with WagmiConfig
-const WakuStatus: React.FC<WakuStatusProps> = (props) => {
-  return (
-    <WagmiConfig config={wagmiConfig}>
-      <WakuStatusContent {...props} />
-    </WagmiConfig>
   );
 };
 
