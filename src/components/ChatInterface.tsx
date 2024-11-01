@@ -15,8 +15,11 @@ import MapView, { LocationUpdate } from './MapView';
 import { chainIdMapping } from './TacoConditionBuilder';
 import AboutPopup from './AboutPopup';
 import SettingsPane from './SettingsPane';
-import { useAccount, useChainId, useSwitchChain } from 'wagmi';
+import { useAccount, useChainId, useSwitchChain, useWalletClient } from 'wagmi';
 import { polygonAmoy } from 'wagmi/chains';
+import { getWalletClient } from 'wagmi/actions';
+import { config as wagmiConfig } from '../config/wagmi'; // Import the config
+import { useConnect } from 'wagmi';
 
 interface ChatMessage {
   id: number;
@@ -105,6 +108,12 @@ const ChatInterface: React.FC = () => {
   const { switchChain } = useSwitchChain();
   const chainId = useChainId();
   const { address } = useAccount();
+
+  // Move useAccount hook to component level
+  const { address: currentAddress, isConnected } = useAccount();
+
+  // Near the top of the component, add/update these hooks
+  const { data: walletClient } = useWalletClient();
 
   // Update isCorrectNetwork whenever chain changes
   useEffect(() => {
@@ -457,14 +466,14 @@ const ChatInterface: React.FC = () => {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() || !account || !web3Provider || !isSubscribed) {
-      console.log('Message validation failed:', {
-        hasInput: !!inputText.trim(),
-        hasAccount: !!account,
-        hasProvider: !!web3Provider,
-        isSubscribed
-      });
-      setError("Please ensure you're connected and the subscription is set up before sending a message.");
+    if (!inputText.trim()) {
+      console.log('No message to send');
+      return;
+    }
+
+    // Check if wallet is connected
+    if (!isConnected || !currentAddress) {
+      setError("Please connect your wallet to send messages.");
       return;
     }
 
@@ -476,25 +485,26 @@ const ChatInterface: React.FC = () => {
       setConditionDescription(`Time: ${new Date(defaultCondition.value.returnValueTest.value * 1000).toLocaleString()}`);
     }
 
-    // Check if the user is on the Polygon Amoy network
-    if (!isCorrectNetwork) {
-      console.log('Not on correct network, attempting to switch');
-      const switched = await switchToPolygonAmoy();
-      if (!switched) {
-        setError("Please switch to the Polygon Amoy network to send messages.");
-        return;
-      }
-    }
-
     try {
       console.log('Starting message encryption process...');
       console.log('Condition:', condition);
       console.log('Domain:', currentDomain);
       console.log('Ritual ID:', ritualId);
-      
+
+      // Check if we have a wallet client from the hook
+      if (!walletClient) {
+        setError("No wallet client available. Please try reconnecting your wallet.");
+        return;
+      }
+
+      // Create an ethers provider from the wallet client
+      const provider = new ethers.providers.Web3Provider(walletClient.transport);
+      await provider.ready; // Wait for provider to be ready
+
+      console.log('Encrypting message with provider:', provider);
       const messageKit = await encryptMessage(
         inputText.trim(), 
-        web3Provider, 
+        provider,
         condition, 
         currentDomain, 
         ritualId
@@ -509,20 +519,19 @@ const ChatInterface: React.FC = () => {
         
         await sendWakuMessage(
           currentTopic.name, 
-          account, 
+          currentAddress,
           messageKitBytes, 
           nickname, 
           conditionString
         );
         console.log('Encrypted message sent via Waku');
         
-        const messageKey = `${account}-${timestamp}`;
+        const messageKey = `${currentAddress}-${timestamp}`;
         setSentMessages(prev => new Map(prev).set(messageKey, timestamp));
-        console.log('Updated sentMessages:', Array.from(sentMessages.entries()));
 
         const newMessage: ChatMessage = {
           id: timestamp,
-          sender: account,
+          sender: currentAddress,
           senderNickname: nickname,
           content: inputText.trim(),
           timestamp: timestamp,
@@ -539,10 +548,15 @@ const ChatInterface: React.FC = () => {
         setInputText('');
       } else {
         console.warn('Waku is not initialized. Message encrypted but not sent.');
+        setError("Unable to send message. Please try again in a moment.");
       }
     } catch (error) {
       console.error('Error encrypting or sending message:', error);
-      setError(`Failed to process message: ${error.message}`);
+      if (error.message.includes('Connector not connected')) {
+        setError("Wallet connection lost. Please reconnect your wallet.");
+      } else {
+        setError(`Failed to process message: ${error.message}`);
+      }
     }
   };
 
