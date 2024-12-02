@@ -45,9 +45,9 @@ const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onCondition
   const [isValidAddress, setIsValidAddress] = useState<boolean | null>(null);
   const [conditionString, setConditionString] = useState(`{
   "conditionType": "rpc",
-  "chain": "80002",
-  "method": "eth_getBalance,
-  "parameters": "[':userAddress']",
+  "chain": 80002,
+  "method": "eth_getBalance",
+  "parameters": [":userAddress"],
   "returnValueTest": {
     "comparator": ">",
       "value": 0
