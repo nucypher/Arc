@@ -17,7 +17,7 @@ export const chainIdMapping: { [key: string]: number } = {
   '11155111': 11155111 // Sepolia Testnet
 };
 
-type ConditionType = 'time' | 'erc20' | 'erc721';
+type ConditionType = 'time' | 'erc20' | 'erc721' | 'custom';
 
 const mapStyles = `
   /* Hide number input spinners */
@@ -43,6 +43,16 @@ const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onCondition
   const [tokenId, setTokenId] = useState('');
   const [balance, setBalance] = useState('');
   const [isValidAddress, setIsValidAddress] = useState<boolean | null>(null);
+  const [conditionString, setConditionString] = useState(`{
+  "conditionType": "rpc",
+  "chain": "80002",
+  "method": "eth_getBalance,
+  "parameters": "[':userAddress']",
+  "returnValueTest": {
+    "comparator": ">",
+      "value": 0
+  }
+}`);
 
   // Add debounce timer ref
   const debounceTimer = useRef<NodeJS.Timeout>();
@@ -84,6 +94,11 @@ const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onCondition
             chain: chainIdMapping[chain],
             parameters: [tokenId],
           });
+          break;
+        case 'custom':
+          condition = conditions.ConditionFactory.conditionFromProps(
+            JSON.parse(conditionString),
+          )
           break;
       }
       if (condition) onConditionChange(condition);
@@ -168,6 +183,7 @@ const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onCondition
           <option value="time">Time Lock</option>
           <option value="erc20">Token Balance</option>
           <option value="erc721">NFT Ownership</option>
+          <option value="custom">Custom</option>
         </select>
       </div>
 
@@ -367,6 +383,29 @@ const TacoConditionBuilder: React.FC<TacoConditionBuilderProps> = ({ onCondition
               className="w-full px-3 py-2 bg-gray-700 text-gray-200 rounded border border-gray-600 focus:outline-none focus:border-blue-500"
             />
           </div>
+        </div>
+      )}
+
+      {/* Custom Condition */}
+      {conditionType === 'custom' && (
+        <div className="space-y-4">
+          <label className="text-sm font-medium text-gray-300">Custom Condition</label>
+          <textarea
+            value={conditionString}
+            onChange={(e) => {
+              setConditionString(e.target.value)
+              try {
+                const condition = conditions.ConditionFactory.conditionFromProps(
+                  JSON.parse(e.target.value)
+                )
+                onConditionChange(condition)
+              } catch (error) {
+                console.error('Invalid condition JSON:', error)
+              }
+            }}
+            className="w-full h-[250px] px-3 py-2 bg-gray-700 text-gray-200 rounded border border-gray-600 focus:outline-none focus:border-blue-500 font-mono text-sm"
+            placeholder="Enter custom condition JSON..."
+          />
         </div>
       )}
 
