@@ -9,11 +9,12 @@
     "dev": "next dev",
     "build": "next build --no-lint",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postinstall": "cd ../nucypher-ts && npm install && npm run build"
   },
   "dependencies": {
-    "@nucypher/taco": "^0.5.0",
-    "@nucypher/taco-auth": "^0.2.0",
+    "@nucypher/taco": "../nucypher-ts/packages/taco",
+    "@nucypher/taco-auth": "../nucypher-ts/packages/taco-auth",
     "@tanstack/react-query": "^5.28.4",
     "@web3modal/wagmi": "^4.0.11",
     "@waku/sdk": "^0.0.29",
