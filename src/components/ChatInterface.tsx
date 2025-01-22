@@ -34,6 +34,18 @@ interface ChatMessage {
   delivered?: boolean;
 }
 
+// Update ethereum window type
+declare global {
+  interface Window {
+    ethereum: {
+      request: (request: { method: string; params?: any[] }) => Promise<any>;
+      on: (event: string, callback: (params: any) => void) => void;
+      removeListener: (event: string, callback: (params: any) => void) => void;
+      removeAllListeners: (event: string) => void;
+    };
+  }
+}
+
 const ChatInterface: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -58,7 +70,7 @@ const ChatInterface: React.FC = () => {
     return defaultCondition;
   });
   const [conditionDescription, setConditionDescription] = useState<string | null>(null);
-  const [currentDomain, setCurrentDomain] = useState<Record<string, string>>(domains.TESTNET);
+  const [currentDomain, setCurrentDomain] = useState<typeof domains.TESTNET>(domains.TESTNET);
   const [nickname, setNickname] = useState<string>(() => {
     return localStorage.getItem('userNickname') || 'Anonymous';
   });
@@ -124,54 +136,6 @@ const ChatInterface: React.FC = () => {
     }
   }, [chainId]);
 
-  useEffect(() => {
-    const init = async () => {
-      // Guard against multiple initializations
-      if (isInitializingWaku.current) {
-        return;
-      }
-
-      setIsInitializing(true);
-      isInitializingWaku.current = true;
-
-      try {
-        const node = await createNode();
-        setWakuNode(node);
-        console.log('Waku node initialized successfully');
-      } catch (error) {
-        console.error('Failed to initialize Waku:', error);
-      } finally {
-        setIsInitializing(false);
-        isInitializingWaku.current = false;
-      }
-    };
-
-    init();
-  }, []);
-
-  useEffect(() => {
-    const initializeChat = async () => {
-      // Guard against multiple initializations
-      if (isInitializingTaco.current) {
-        return;
-      }
-
-      try {
-        isInitializingTaco.current = true;
-        await initializeTaco();
-        console.log('TACo initialized successfully');
-        setInitializationError(null);
-      } catch (error) {
-        console.error('Failed to initialize TACo:', error);
-        setInitializationError(`Failed to initialize TACo: ${error.message}`);
-      } finally {
-        isInitializingTaco.current = false;
-      }
-    };
-
-    initializeChat();
-  }, []);
-
   // Move filterMessages and setFilteredMessages up
   const filterMessages = useCallback((messages: ChatMessage[]) => {
     return messages.filter(message => 
@@ -187,7 +151,7 @@ const ChatInterface: React.FC = () => {
     });
   }, [filterMessages]);
 
-  // Define setupSubscription with minimal dependencies
+  // Define setupSubscription after filterMessages and setFilteredMessages
   const setupSubscription = useCallback(async () => {
     // Guard against multiple simultaneous setup attempts
     if (isSettingUpSubscription.current || isSubscribed) {
@@ -311,7 +275,7 @@ const ChatInterface: React.FC = () => {
         },
         web3Provider,
         currentDomain,
-        locationTopic // Pass the channel-specific location topic
+        locationTopic
       );
 
       // Store subscriptions for cleanup
@@ -330,22 +294,26 @@ const ChatInterface: React.FC = () => {
       isSettingUpSubscription.current = false;
     }
   }, [wakuNode, currentTopic, web3Provider, currentDomain, isSubscribed, account, setFilteredMessages]);
-  // Then define initializeNewProvider
+
+  // Define initializeNewProvider after setupSubscription
   const initializeNewProvider = useCallback(async () => {
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     try {
-      const newProvider = new ethers.providers.Web3Provider(window.ethereum);
-      await newProvider.ready;
-      const network = await newProvider.getNetwork();
+      if (!walletClient) return false;
+      
+      // Cast the transport to any to bypass type checking
+      const provider = new ethers.providers.Web3Provider(walletClient.transport as any);
+      await provider.ready;
+      const network = await provider.getNetwork();
       
       if (network.chainId === 80002) {
         setIsSubscribed(false);
-        setWeb3Provider(newProvider);
+        setWeb3Provider(provider);
         setEthereumNetwork('amoy');
         setIsCorrectNetwork(true);
 
-        const signer = newProvider.getSigner();
+        const signer = provider.getSigner();
         const address = await signer.getAddress();
         setAccount(address);
 
@@ -360,7 +328,101 @@ const ChatInterface: React.FC = () => {
       console.error('Error initializing new provider:', error);
       return false;
     }
-  }, [wakuNode, setupSubscription]);
+  }, [wakuNode, setupSubscription, walletClient]);
+
+  // Add effect to initialize web3Provider when wallet is connected
+  useEffect(() => {
+    const initProvider = async () => {
+      if (isConnected && walletClient) {
+        try {
+          // Cast the transport to any to bypass type checking
+          const provider = new ethers.providers.Web3Provider(walletClient.transport as any);
+          await provider.ready;
+          setWeb3Provider(provider);
+          const signer = provider.getSigner();
+          const address = await signer.getAddress();
+          setAccount(address);
+        } catch (error) {
+          console.error('Error initializing provider:', error);
+        }
+      }
+    };
+
+    initProvider();
+  }, [isConnected, walletClient]);
+
+  // Create a single handler for network changes
+  const handleChainChange = useCallback(async (chainId: string) => {
+    console.log('Network changed to:', chainId);
+    const newChainId = parseInt(chainId, 16);
+    setIsCorrectNetwork(newChainId === 80002);
+    if (newChainId === 80002) {
+      setEthereumNetwork('amoy');
+    }
+    await initializeNewProvider();
+  }, [initializeNewProvider]);
+
+  // Update ethereum event listeners
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.ethereum) {
+      window.ethereum.removeListener('chainChanged', handleChainChange);
+      window.ethereum.on('chainChanged', handleChainChange);
+
+      return () => {
+        if (window.ethereum?.removeListener) {
+          window.ethereum.removeListener('chainChanged', handleChainChange);
+        }
+      };
+    }
+  }, [handleChainChange]);
+
+  useEffect(() => {
+    const init = async () => {
+      // Guard against multiple initializations
+      if (isInitializingWaku.current) {
+        return;
+      }
+
+      setIsInitializing(true);
+      isInitializingWaku.current = true;
+
+      try {
+        const node = await createNode();
+        setWakuNode(node);
+        console.log('Waku node initialized successfully');
+      } catch (error) {
+        console.error('Failed to initialize Waku:', error);
+      } finally {
+        setIsInitializing(false);
+        isInitializingWaku.current = false;
+      }
+    };
+
+    init();
+  }, []);
+
+  useEffect(() => {
+    const initializeChat = async () => {
+      // Guard against multiple initializations
+      if (isInitializingTaco.current) {
+        return;
+      }
+
+      try {
+        isInitializingTaco.current = true;
+        await initializeTaco();
+        console.log('TACo initialized successfully');
+        setInitializationError(null);
+      } catch (error) {
+        console.error('Failed to initialize TACo:', error);
+        setInitializationError(`Failed to initialize TACo: ${error.message}`);
+      } finally {
+        isInitializingTaco.current = false;
+      }
+    };
+
+    initializeChat();
+  }, []);
 
   const handleWalletConnect = useCallback(async (provider: ethers.providers.Web3Provider, connectedAccount: string) => {
     try {
@@ -1013,6 +1075,7 @@ const ChatInterface: React.FC = () => {
           handleDomainChange={handleDomainChange}
           currentDomain={currentDomain}
           connectedAccount={account}
+          web3Provider={web3Provider}
         />
       )}
 

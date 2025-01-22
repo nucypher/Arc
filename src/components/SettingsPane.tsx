@@ -64,9 +64,7 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({
           </div>
         </div>
 
-        {/* Settings Content */}
         <div className="p-4 space-y-6">
-          {/* Identity Section */}
           <section className="space-y-3">
             <div className="flex items-center space-x-2 text-gray-300">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -75,7 +73,6 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({
               <h3 className="text-sm font-medium">Identity</h3>
             </div>
             <div className="bg-gray-800 rounded-lg p-3 space-y-3">
-              {/* Wallet Address */}
               {displayAddress && (
                 <div className="flex items-center justify-between p-2 bg-gray-700 bg-opacity-50 rounded-lg">
                   <div className="flex items-center space-x-2">
@@ -96,7 +93,6 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({
                 </div>
               )}
 
-              {/* Nickname */}
               {isEditingNickname ? (
                 <div className="flex items-center space-x-2">
                   <input
@@ -143,7 +139,6 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({
             </div>
           </section>
 
-          {/* Network Settings */}
           <section className="space-y-3">
             <div className="flex items-center space-x-2 text-gray-300">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
