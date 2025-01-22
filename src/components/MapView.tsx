@@ -9,6 +9,7 @@ import ChatBubble from './ChatBubble';
 import TacoConditionBuilder from './TacoConditionBuilder';
 import TacoDomainSelector from './TacoDomainSelector';
 import * as ethers from 'ethers';
+import SettingsPane from './SettingsPane';
 
 // Fix for default marker icons in react-leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -755,113 +756,19 @@ const MapView: React.FC<MapViewProps> = ({
       </div>
 
       {isSettingsOpen && (
-        <div className="absolute inset-0 bg-black bg-opacity-50 z-[2000] flex justify-end">
-          <div className="w-96 bg-gray-900 h-full overflow-y-auto border-l border-gray-800">
-            <div className="p-6">
-              <div className="flex justify-end mb-6">
-                <button
-                  onClick={onCloseSettings}
-                  className="text-gray-400 hover:text-gray-300 transition-colors"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="space-y-8">
-                <div className="space-y-4">
-                  <div className="border-b border-gray-800 pb-2">
-                    <h3 className="text-lg font-medium text-gray-200">Identity</h3>
-                    <p className="text-sm text-gray-400">Your profile settings</p>
-                  </div>
-                  <div className="bg-gray-800 bg-opacity-50 rounded-lg p-4 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-400">Nickname</span>
-                      <div className="flex items-center space-x-2">
-                        {isEditingNickname ? (
-                          <>
-                            <input
-                              type="text"
-                              value={nickname}
-                              onChange={onNicknameChange}
-                              className="px-2 py-1 bg-gray-700 text-gray-200 rounded border border-gray-600 focus:outline-none focus:border-blue-500"
-                              placeholder="Enter nickname"
-                            />
-                            <button
-                              onClick={onSaveNickname}
-                              className="text-blue-400 hover:text-blue-300"
-                            >
-                              Save
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <span className="text-gray-200">{nickname}</span>
-                            <button
-                              onClick={() => setIsEditingNickname(true)}
-                              className="text-blue-400 hover:text-blue-300"
-                            >
-                              Edit
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-400">Wallet</span>
-                      <div className="flex items-center space-x-2">
-                        <Blockie address={account} size={20} className="mr-2" />
-                        <span className="text-gray-200">{truncateAddress(account)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-6">
-                  <div className="border-b border-gray-800 pb-2">
-                    <h3 className="text-lg font-medium text-gray-200">Message Encryption</h3>
-                    <p className="text-sm text-gray-400">Choose how your messages will be encrypted</p>
-                  </div>
-
-                  <TacoConditionBuilder 
-                    onConditionChange={handleConditionChange} 
-                    isActive={isSettingsOpen}
-                  />
-                </div>
-
-                <div className="space-y-4">
-                  <div className="border-b border-gray-800 pb-2">
-                    <h3 className="text-lg font-medium text-gray-200">Network</h3>
-                    <p className="text-sm text-gray-400">Network and connection settings</p>
-                  </div>
-                  <div className="bg-gray-800 bg-opacity-50 rounded-lg p-4 space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-400">Network</span>
-                      <span className="text-gray-200">Polygon Amoy</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-400">Taco Domain</span>
-                      <div className="w-32">
-                        <TacoDomainSelector 
-                          onDomainChange={handleDomainChange} 
-                          currentDomain={currentDomain} 
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-8 pt-4 border-t border-gray-800">
-                <SaveIndicator 
-                  isSaving={isSavingSettings} 
-                  showSuccess={showSaveSuccess}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+        <SettingsPane
+          onClose={onCloseSettings}
+          nickname={nickname}
+          onNicknameChange={onNicknameChange}
+          onSaveNickname={onSaveNickname}
+          isEditingNickname={isEditingNickname}
+          setIsEditingNickname={setIsEditingNickname}
+          handleConditionChange={handleConditionChange}
+          handleDomainChange={handleDomainChange}
+          currentDomain={currentDomain}
+          connectedAccount={account}
+          web3Provider={web3Provider}
+        />
       )}
     </div>
   );

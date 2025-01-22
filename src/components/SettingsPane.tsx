@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import TacoConditionBuilder from './TacoConditionBuilder';
 import TacoDomainSelector from './TacoDomainSelector';
 import Blockie from './Blockie';
 import { useAccount } from 'wagmi';
+import { revokeDelegation, initializeEncryptorSigner, getDelegationStatus } from '../lib/taco';
+import { ethers } from 'ethers';
 
 interface SettingsPaneProps {
   onClose: () => void;
@@ -15,7 +17,27 @@ interface SettingsPaneProps {
   handleDomainChange: (domain: any, ritualId: string) => void;
   currentDomain: any;
   connectedAccount: string | null;
+  web3Provider: ethers.providers.Web3Provider;
 }
+
+const DelegationStatus: React.FC<{
+  isActive: boolean;
+  timeRemaining: string | null;
+}> = ({ isActive, timeRemaining }) => (
+  <div className="flex items-center space-x-2">
+    <div className={`w-2 h-2 rounded-full ${
+      isActive ? 'bg-green-400 animate-pulse' : 'bg-red-400'
+    }`} />
+    <span className={`text-sm ${isActive ? 'text-green-400' : 'text-red-400'}`}>
+      {isActive ? 'Active' : 'Inactive'}
+    </span>
+    {isActive && timeRemaining && (
+      <span className="text-xs text-gray-400">
+        ({timeRemaining} remaining)
+      </span>
+    )}
+  </div>
+);
 
 const SettingsPane: React.FC<SettingsPaneProps> = ({
   onClose,
@@ -28,21 +50,191 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({
   handleDomainChange,
   currentDomain,
   connectedAccount,
+  web3Provider,
 }) => {
-  // Get the current account from wagmi
   const { address } = useAccount();
   
-  // Use either the wagmi address or the passed connectedAccount
   const displayAddress = address || connectedAccount;
 
   const truncateAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
+  const [delegationActive, setDelegationActive] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState<string | null>(null);
+  const [isRevoking, setIsRevoking] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [providerError, setProviderError] = useState<string | null>(null);
+
+  const formatTimeRemaining = (ms: number) => {
+    const minutes = Math.floor(ms / (1000 * 60));
+    if (minutes < 1) return 'less than a minute';
+    if (minutes === 1) return '1 minute';
+    return `${minutes} minutes`;
+  };
+
+  const checkProvider = async () => {
+    try {
+      if (!web3Provider) {
+        setProviderError('Wallet not connected');
+        return false;
+      }
+      
+      const signer = web3Provider.getSigner();
+      await signer.getAddress();
+      
+      setProviderError(null);
+      return true;
+    } catch (error) {
+      setProviderError('Error accessing wallet');
+      return false;
+    }
+  };
+
+  const delegationSection = (
+    <section className="space-y-3">
+      <div className="flex items-center space-x-2 text-gray-300">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+            d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+        </svg>
+        <h3 className="text-sm font-medium">Encryption Delegation</h3>
+      </div>
+      <div className="bg-gray-800 rounded-lg p-3 space-y-3">
+        <div className="flex justify-between items-center">
+          <DelegationStatus isActive={delegationActive} timeRemaining={timeRemaining} />
+          <div className="flex space-x-2">
+            {delegationActive ? (
+              <button
+                onClick={async () => {
+                  setIsRevoking(true);
+                  try {
+                    revokeDelegation();
+                    setDelegationActive(false);
+                    setTimeRemaining(null);
+                  } catch (error) {
+                    console.error('Failed to revoke delegation:', error);
+                  } finally {
+                    setIsRevoking(false);
+                  }
+                }}
+                disabled={isRevoking || isCreating}
+                className="px-3 py-1.5 bg-red-600 text-white rounded text-sm hover:bg-red-700 transition-colors"
+              >
+                {isRevoking ? (
+                  <div className="flex items-center space-x-1">
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    <span>Revoking...</span>
+                  </div>
+                ) : 'Revoke'}
+              </button>
+            ) : (
+              <button
+                onClick={async () => {
+                  setProviderError(null);
+                  if (!await checkProvider()) {
+                    return;
+                  }
+                  
+                  setIsCreating(true);
+                  try {
+                    await initializeEncryptorSigner(web3Provider, true);
+                    const status = getDelegationStatus();
+                    setDelegationActive(status.isActive);
+                    if (status.timeRemaining) {
+                      setTimeRemaining(formatTimeRemaining(status.timeRemaining));
+                    }
+                  } catch (error) {
+                    console.error('Failed to create delegation:', error);
+                    setProviderError('Failed to create delegation');
+                  } finally {
+                    setIsCreating(false);
+                  }
+                }}
+                disabled={isCreating || isRevoking}
+                className={`px-3 py-1.5 ${
+                  isCreating
+                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                } rounded text-sm transition-colors duration-200`}
+              >
+                {isCreating ? (
+                  <div className="flex items-center space-x-1">
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    <span>Creating...</span>
+                  </div>
+                ) : 'Create New'}
+              </button>
+            )}
+          </div>
+        </div>
+        
+        {providerError && (
+          <div className="mt-2 text-sm text-red-400 flex items-center space-x-1">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>{providerError}</span>
+          </div>
+        )}
+        
+        <p className="text-xs text-gray-400">
+          {delegationActive 
+            ? 'Encryption delegation is active. Messages will be encrypted without additional signatures.'
+            : 'Create a new delegation to encrypt messages without repeated signature requests.'}
+        </p>
+      </div>
+    </section>
+  );
+
+  useEffect(() => {
+    checkProvider();
+  }, [web3Provider]);
+
+  useEffect(() => {
+    const checkDelegationStatus = () => {
+      const status = getDelegationStatus();
+      setDelegationActive(status.isActive);
+      if (status.isActive && status.timeRemaining > 0) {
+        setTimeRemaining(formatTimeRemaining(status.timeRemaining));
+      } else {
+        setTimeRemaining(null);
+      }
+    };
+
+    checkDelegationStatus();
+
+    const interval = setInterval(checkDelegationStatus, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!delegationActive) return;
+
+    const interval = setInterval(() => {
+      const status = getDelegationStatus();
+      if (!status.isActive || status.timeRemaining <= 0) {
+        setDelegationActive(false);
+        setTimeRemaining(null);
+      } else {
+        setTimeRemaining(formatTimeRemaining(status.timeRemaining));
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [delegationActive]);
+
   return (
     <div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-[2000] flex justify-end transition-opacity duration-200">
       <div className="w-96 bg-gray-900 h-full overflow-y-auto border-l border-gray-800 shadow-2xl">
-        {/* Header */}
         <div className="sticky top-0 bg-gray-900 border-b border-gray-800 p-4 z-10">
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-2">
@@ -64,9 +256,7 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({
           </div>
         </div>
 
-        {/* Settings Content */}
         <div className="p-4 space-y-6">
-          {/* Identity Section */}
           <section className="space-y-3">
             <div className="flex items-center space-x-2 text-gray-300">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -75,7 +265,6 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({
               <h3 className="text-sm font-medium">Identity</h3>
             </div>
             <div className="bg-gray-800 rounded-lg p-3 space-y-3">
-              {/* Wallet Address */}
               {displayAddress && (
                 <div className="flex items-center justify-between p-2 bg-gray-700 bg-opacity-50 rounded-lg">
                   <div className="flex items-center space-x-2">
@@ -96,7 +285,6 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({
                 </div>
               )}
 
-              {/* Nickname */}
               {isEditingNickname ? (
                 <div className="flex items-center space-x-2">
                   <input
@@ -130,7 +318,8 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({
             </div>
           </section>
 
-          {/* Encryption Settings */}
+          {delegationSection}
+
           <section className="space-y-3">
             <div className="flex items-center space-x-2 text-gray-300">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -143,7 +332,6 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({
             </div>
           </section>
 
-          {/* Network Settings */}
           <section className="space-y-3">
             <div className="flex items-center space-x-2 text-gray-300">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
